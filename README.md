@@ -52,7 +52,7 @@ The *seerr integration allows you to easily request content for your server. Ite
 <img width="1266" height="713" alt="image" src="https://github.com/user-attachments/assets/fc6fd813-f7fe-44ae-95f9-5b816f1e35ff" />
 <img width="1266" height="713" alt="image" src="https://github.com/user-attachments/assets/156066d7-502c-4401-b4a9-b27885c0eb39" />
 
-MPV Play with easy to use UI
+MPV Play with easy to use UI (Skip Intro and Autoplay for next episodes is available)
 <img width="1266" height="713" alt="image" src="https://github.com/user-attachments/assets/b13d7152-d2b8-4243-911d-7dda281bed36" />
 <img width="1266" height="713" alt="image" src="https://github.com/user-attachments/assets/bbf59799-8870-4bb7-a925-568a11338b0f" />
 -----------------------------------------------------------------------------------------------
