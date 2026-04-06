@@ -1,4 +1,4 @@
-# Zerk-Cloud
+# Zerk-Play
 Zerk Play is a couch-friendly Emby desktop client with built-in *seerr request integration.
 <img width="1266" height="713" alt="image" src="https://github.com/user-attachments/assets/1b318a5e-7785-4873-8c21-26083f32e0df" />
 Zerk Play is a custom Emby desktop front-end designed for fast browsing, big-screen use, and seamless requests via your \*seerr instance.
