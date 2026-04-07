@@ -4,7 +4,9 @@ Zerk Play is a Flutter based couch-friendly Emby desktop client with built-in *s
 Zerk Play is a custom Emby desktop front-end designed for fast browsing, big-screen use, and seamless requests via your \*seerr instance.
 
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/florinp93)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/florinp93) 
+Join the Discord server to provide feedback and suggestions
+[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/GnqY9z6zry)
 
 On first launch, you configure:
 
