@@ -1,0 +1,8 @@
+Place your libmpv-2.dll here.
+
+This project expects the file at:
+  libs/libmpv-2.dll
+
+You can obtain mpv/libmpv builds from:
+  https://mpv.io/
+
