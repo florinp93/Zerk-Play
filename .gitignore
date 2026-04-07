@@ -33,6 +33,7 @@ migrate_working_dir/
 /build/
 /coverage/
 emby_dumps/
+libs/*.dll
 
 # Symbolication related
 app.*.symbols

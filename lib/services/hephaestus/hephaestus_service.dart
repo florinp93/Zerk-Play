@@ -19,9 +19,7 @@ final class AppUpdateInfo {
 }
 
 final class HephaestusService {
-  HephaestusService({
-    required String githubRepo,
-  }) : _githubRepo = githubRepo;
+  HephaestusService({required String githubRepo}) : _githubRepo = githubRepo;
 
   final String _githubRepo;
   late final String _currentVersion;
@@ -54,13 +52,12 @@ final class HephaestusService {
 
       final remoteVersion = tagName.replaceFirst('v', '').trim();
 
-      // Check if remote is newer than current
       if (!_isNewerVersion(_currentVersion, remoteVersion)) {
         return null; // Up to date
       }
 
-      if (skippedVersion != null && !_isNewerVersion(skippedVersion, remoteVersion)) {
-        // User skipped this version or a newer one
+      if (skippedVersion != null &&
+          !_isNewerVersion(skippedVersion, remoteVersion)) {
         return null;
       }
 
@@ -126,7 +123,6 @@ final class HephaestusService {
       await sink.flush();
       await sink.close();
 
-      // Launch the installer
       await Process.start(file.path, [], mode: ProcessStartMode.detached);
       exit(0);
     } finally {
