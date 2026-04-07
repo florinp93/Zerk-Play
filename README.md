@@ -82,3 +82,7 @@ MPV Play with easy to use UI (Skip Intro and Autoplay for next episodes are avai
 
 - **High priority**: Android & Android TV version
 - **Medium priority**: Emby Live TV & Music libraries
+
+## Building
+
+See [BUILDING.md](BUILDING.md).
