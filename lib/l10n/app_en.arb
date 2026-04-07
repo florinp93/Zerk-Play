@@ -1,0 +1,175 @@
+{
+  "@@locale": "en",
+  "appTitle": "Zerk Play",
+
+  "unknownLibraryType": "Unknown library type",
+  "invalidRequestItem": "Invalid request item",
+
+  "home": "Home",
+  "back": "Back",
+  "search": "Search",
+  "movies": "Movies",
+  "series": "Series",
+  "shows": "Shows",
+  "collections": "Collections",
+  "settings": "Settings",
+  "logout": "Logout",
+  "viewAll": "View all",
+  "moreInfo": "More Info",
+  "continueWatching": "Continue Watching",
+  "latestMovies": "Latest Movies",
+  "recentlyReleasedMovies": "Recently Released Movies",
+  "trendingMovies": "Trending Movies",
+  "topRatedMovies": "Top Rated Movies",
+  "latestSeries": "Latest Series",
+  "recentlyReleasedSeries": "Recently Released Series",
+  "trendingShows": "Trending Shows",
+  "topRatedSeries": "Top Rated Series",
+  "becauseYouWatched": "Because you watched {title}",
+  "@becauseYouWatched": {
+    "placeholders": {
+      "title": {}
+    }
+  },
+  "youMightEnjoy": "You might enjoy",
+  "yourNextBinge": "Your next binge",
+  "trendingUnavailable": "Trending unavailable",
+
+  "save": "Save",
+  "cancel": "Cancel",
+  "clear": "Clear",
+  "apply": "Apply",
+
+  "appLanguage": "App language",
+  "languageSystem": "System",
+  "languageEnglish": "English",
+  "languageRomanian": "Romanian",
+
+  "qualityPreference": "Quality preference",
+  "qualityAuto": "Auto",
+  "quality4k": "4K",
+  "quality1080p": "1080p",
+  "quality720p": "720p",
+
+  "audio": "Audio",
+  "subtitles": "Subtitles",
+  "off": "Off",
+  "auto": "Auto",
+
+  "signOut": "Sign out",
+  "signIn": "Sign in",
+  "username": "Username",
+  "password": "Password",
+  "loginWelcomeBack": "Welcome back",
+  "loginSignInToContinue": "Sign in to continue",
+
+  "resume": "Resume",
+  "play": "Play",
+  "pause": "Pause",
+  "watched": "Watched",
+  "markAsWatched": "Mark as Watched",
+  "startFromBeginning": "Start from Beginning",
+  "details": "Details",
+  "listView": "List view",
+  "gridView": "Grid view",
+  "season": "Season",
+  "seasons": "Seasons",
+  "episodes": "Episodes",
+  "noSeasonsFound": "No seasons found.",
+  "noEpisodesFound": "No episodes found.",
+  "youMightAlsoLike": "You might also like",
+
+  "quality": "Quality",
+
+  "noItemsFound": "No items found.",
+  "noCollectionsFound": "No collections found.",
+
+  "playback": "Playback",
+  "skipIntro": "Skip Intro",
+  "playNext": "Play Next",
+  "dismiss": "Dismiss",
+  "nextUp": "Next Up",
+  "nextUpIn": "Next Up in {seconds}",
+  "@nextUpIn": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "noAudioTracksFound": "No audio tracks found.",
+  "subtitleSettings": "Subtitle settings",
+  "subtitleSettingsTitle": "Subtitle Settings",
+  "fontSize": "Font size",
+  "background": "Background",
+  "backgroundOpacity": "Background opacity",
+  "reset": "Reset",
+  "close": "Close",
+  "fullscreen": "Fullscreen",
+  "exitFullscreen": "Exit fullscreen",
+  "volumePercent": "Volume {pct}%",
+  "@volumePercent": {
+    "placeholders": {
+      "pct": {}
+    }
+  },
+  "audioTrack": "Audio {id}",
+  "@audioTrack": {
+    "placeholders": {
+      "id": {}
+    }
+  },
+  "subtitleTrack": "Subtitle {id}",
+  "@subtitleTrack": {
+    "placeholders": {
+      "id": {}
+    }
+  },
+
+  "filters": "Filters",
+  "filter": "Filter",
+  "releaseYear": "Release year",
+  "any": "Any",
+  "genre": "Genre",
+  "yearChip": "Year {year}",
+  "@yearChip": {
+    "placeholders": {
+      "year": {}
+    }
+  },
+
+  "loadingEllipsis": "Loading…",
+  "unavailable": "Unavailable",
+  "requested": "Requested",
+  "processing": "Processing",
+  "request": "Request",
+
+  "availableSectionTitle": "Available",
+  "availableSectionSubtitle": "In your library",
+  "requestableSectionTitle": "Requestable",
+  "requestableSectionSubtitle": "Not in your library",
+
+  "badgeAvailable": "AVAILABLE",
+  "badgeRequest": "REQUEST",
+  "badgePlayed": "PLAYED",
+  "badgeResume": "RESUME",
+  "badgeMovie": "MOVIE",
+  "badgeTv": "TV",
+
+  "searchHint": "Search movies and series",
+  "searchEmptyTitle": "Search your library or request something new",
+  "searchEmptySubtitle": "Results show what’s already available, plus requestable items in black & white.",
+  "tryQuery": "Try “{query}”",
+  "@tryQuery": {
+    "placeholders": {
+      "query": {}
+    }
+  },
+  "noResults": "No results",
+  "tryDifferentTitle": "Try a different title.",
+  "nothingMatched": "Nothing matched “{query}”.",
+  "@nothingMatched": {
+    "placeholders": {
+      "query": {}
+    }
+  },
+  "searchFailed": "Search failed"
+}

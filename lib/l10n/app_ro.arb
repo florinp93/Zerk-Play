@@ -1,0 +1,175 @@
+{
+  "@@locale": "ro",
+  "appTitle": "Zerk Play",
+
+  "unknownLibraryType": "Tip de bibliotecă necunoscut",
+  "invalidRequestItem": "Element invalid pentru cerere",
+
+  "home": "Acasă",
+  "back": "Înapoi",
+  "search": "Căutare",
+  "movies": "Filme",
+  "series": "Seriale",
+  "shows": "Seriale",
+  "collections": "Colecții",
+  "settings": "Setări",
+  "logout": "Deconectare",
+  "viewAll": "Vezi toate",
+  "moreInfo": "Mai multe informații",
+  "continueWatching": "Continuă vizionarea",
+  "latestMovies": "Filme adăugate recent",
+  "recentlyReleasedMovies": "Filme lansate recent",
+  "trendingMovies": "Filme în tendințe",
+  "topRatedMovies": "Filme cu rating mare",
+  "latestSeries": "Seriale adăugate recent",
+  "recentlyReleasedSeries": "Seriale lansate recent",
+  "trendingShows": "Seriale în tendințe",
+  "topRatedSeries": "Seriale cu rating mare",
+  "becauseYouWatched": "Pentru că ai urmărit {title}",
+  "@becauseYouWatched": {
+    "placeholders": {
+      "title": {}
+    }
+  },
+  "youMightEnjoy": "S-ar putea să-ți placă",
+  "yourNextBinge": "Următorul tău maraton",
+  "trendingUnavailable": "Tendințe indisponibile",
+
+  "save": "Salvează",
+  "cancel": "Anulează",
+  "clear": "Șterge",
+  "apply": "Aplică",
+
+  "appLanguage": "Limba aplicației",
+  "languageSystem": "Sistem",
+  "languageEnglish": "Engleză",
+  "languageRomanian": "Română",
+
+  "qualityPreference": "Preferință calitate",
+  "qualityAuto": "Automat",
+  "quality4k": "4K",
+  "quality1080p": "1080p",
+  "quality720p": "720p",
+
+  "audio": "Audio",
+  "subtitles": "Subtitrări",
+  "off": "Oprit",
+  "auto": "Automat",
+
+  "signOut": "Deconectare",
+  "signIn": "Autentificare",
+  "username": "Utilizator",
+  "password": "Parolă",
+  "loginWelcomeBack": "Bine ai revenit",
+  "loginSignInToContinue": "Autentifică-te pentru a continua",
+
+  "resume": "Reia",
+  "play": "Redă",
+  "pause": "Pauză",
+  "watched": "Vizionat",
+  "markAsWatched": "Marchează ca vizionat",
+  "startFromBeginning": "Pornește de la început",
+  "details": "Detalii",
+  "listView": "Listă",
+  "gridView": "Grilă",
+  "season": "Sezon",
+  "seasons": "Sezoane",
+  "episodes": "Episoade",
+  "noSeasonsFound": "Nu s-au găsit sezoane.",
+  "noEpisodesFound": "Nu s-au găsit episoade.",
+  "youMightAlsoLike": "S-ar putea să-ți placă și",
+
+  "quality": "Calitate",
+
+  "noItemsFound": "Nu s-au găsit elemente.",
+  "noCollectionsFound": "Nu s-au găsit colecții.",
+
+  "playback": "Redare",
+  "skipIntro": "Sari peste intro",
+  "playNext": "Redă următorul",
+  "dismiss": "Închide",
+  "nextUp": "Urmează",
+  "nextUpIn": "Urmează în {seconds}",
+  "@nextUpIn": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "noAudioTracksFound": "Nu s-au găsit piste audio.",
+  "subtitleSettings": "Setări subtitrări",
+  "subtitleSettingsTitle": "Setări subtitrări",
+  "fontSize": "Mărime font",
+  "background": "Fundal",
+  "backgroundOpacity": "Opacitate fundal",
+  "reset": "Resetează",
+  "close": "Închide",
+  "fullscreen": "Ecran complet",
+  "exitFullscreen": "Ieși din ecran complet",
+  "volumePercent": "Volum {pct}%",
+  "@volumePercent": {
+    "placeholders": {
+      "pct": {}
+    }
+  },
+  "audioTrack": "Audio {id}",
+  "@audioTrack": {
+    "placeholders": {
+      "id": {}
+    }
+  },
+  "subtitleTrack": "Subtitrare {id}",
+  "@subtitleTrack": {
+    "placeholders": {
+      "id": {}
+    }
+  },
+
+  "filters": "Filtre",
+  "filter": "Filtru",
+  "releaseYear": "Anul lansării",
+  "any": "Oricare",
+  "genre": "Gen",
+  "yearChip": "Anul {year}",
+  "@yearChip": {
+    "placeholders": {
+      "year": {}
+    }
+  },
+
+  "loadingEllipsis": "Se încarcă…",
+  "unavailable": "Indisponibil",
+  "requested": "Cerut",
+  "processing": "În procesare",
+  "request": "Cere",
+
+  "availableSectionTitle": "Disponibile",
+  "availableSectionSubtitle": "În biblioteca ta",
+  "requestableSectionTitle": "Disponibile la cerere",
+  "requestableSectionSubtitle": "Nu sunt în biblioteca ta",
+
+  "badgeAvailable": "DISPONIBIL",
+  "badgeRequest": "CERE",
+  "badgePlayed": "VIZIONAT",
+  "badgeResume": "REIA",
+  "badgeMovie": "FILM",
+  "badgeTv": "TV",
+
+  "searchHint": "Caută filme și seriale",
+  "searchEmptyTitle": "Caută în bibliotecă sau cere ceva nou",
+  "searchEmptySubtitle": "Rezultatele arată ce e deja disponibil, plus titluri ce pot fi cerute în alb-negru.",
+  "tryQuery": "Încearcă „{query}”",
+  "@tryQuery": {
+    "placeholders": {
+      "query": {}
+    }
+  },
+  "noResults": "Niciun rezultat",
+  "tryDifferentTitle": "Încearcă un alt titlu.",
+  "nothingMatched": "Nimic nu corespunde cu „{query}”.",
+  "@nothingMatched": {
+    "placeholders": {
+      "query": {}
+    }
+  },
+  "searchFailed": "Căutarea a eșuat"
+}
