@@ -53,6 +53,9 @@ final class EmbyMediaSource {
     required this.video,
     required this.audioStreams,
     required this.subtitleStreams,
+    this.introStartTicks,
+    this.introEndTicks,
+    this.creditsStartTicks,
   });
 
   final String id;
@@ -67,6 +70,10 @@ final class EmbyMediaSource {
   final EmbyVideoStreamSummary? video;
   final List<EmbyAudioStream> audioStreams;
   final List<EmbySubtitleStream> subtitleStreams;
+  /// Parsed from the Chapters field in PlaybackInfo — null when absent.
+  final int? introStartTicks;
+  final int? introEndTicks;
+  final int? creditsStartTicks;
 
   factory EmbyMediaSource.fromJson(
     Map<String, dynamic> json, {
@@ -124,6 +131,30 @@ final class EmbyMediaSource {
       }
     }
 
+    // Parse intro/credits markers from Chapters (present when Fields=Chapters
+    // is requested, e.g. in the PlaybackInfo response).
+    int? introStartTicks;
+    int? introEndTicks;
+    int? creditsStartTicks;
+    final chapters = json['Chapters'];
+    if (chapters is List) {
+      for (final c in chapters) {
+        if (c is! Map) continue;
+        final markerType = c['MarkerType'];
+        if (markerType is! String) continue;
+        final startValue = c['StartPositionTicks'];
+        final startTicks =
+            startValue is num ? startValue.toInt() : (startValue as int?) ?? 0;
+        if (markerType == 'IntroStart') {
+          introStartTicks ??= startTicks;
+        } else if (markerType == 'IntroEnd') {
+          introEndTicks ??= startTicks;
+        } else if (markerType == 'CreditsStart') {
+          creditsStartTicks ??= startTicks;
+        }
+      }
+    }
+
     return EmbyMediaSource(
       id: id,
       name: json['Name'] as String?,
@@ -137,6 +168,9 @@ final class EmbyMediaSource {
       video: EmbyVideoStreamSummary.fromMediaStreams(streamsList),
       audioStreams: audioStreams,
       subtitleStreams: subtitleStreams,
+      introStartTicks: introStartTicks,
+      introEndTicks: introEndTicks,
+      creditsStartTicks: creditsStartTicks,
     );
   }
 }

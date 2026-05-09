@@ -34,34 +34,20 @@ Output: `build/windows/x64/runner/Release/zerk_play.exe`
 
 ## Android TV
 
-### Optional FFmpeg decoder AARs
-For extended codec support (AC3, EAC3, DTS, TrueHD, AV1, VP9, FLAC, Opus), place the decoder AAR files in `android/app/libs/`:
-- `decoder_ffmpeg-release.aar`
-- `decoder_av1-release.aar`
-- `decoder_vp9-release.aar`
-- `decoder_flac-release.aar`
-- `decoder_opus-release.aar`
+For a full walkthrough — including extended codec AARs, ADB sideloading, and
+wireless install options — see **[BUILDING_ANDROID.md](BUILDING_ANDROID.md)**.
 
-These are optional; ExoPlayer will use its built-in decoders without them.
-
-### Run on a connected device
+### Quick start
 
 ```bash
+# Run on a connected device
 flutter run -d <device-id>
-```
 
-### Build release APK
-
-```bash
+# Build release APK
 flutter build apk --release
-```
+# → build/app/outputs/flutter-apk/app-release.apk
 
-Output: `build/app/outputs/flutter-apk/app-release.apk`
-
-### Sideload to Android TV
-Transfer the APK via ADB:
-
-```bash
+# Sideload via ADB
 adb install build/app/outputs/flutter-apk/app-release.apk
 ```
 

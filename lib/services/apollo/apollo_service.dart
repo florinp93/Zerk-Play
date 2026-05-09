@@ -39,6 +39,7 @@ final class ApolloService {
       '/Items/$itemId/PlaybackInfo',
       queryParameters: {
         'UserId': session.userId,
+        'Fields': 'Chapters',
       },
       body: {
         'DeviceProfile': buildDeviceProfile(passthroughCodecs: passthrough),
