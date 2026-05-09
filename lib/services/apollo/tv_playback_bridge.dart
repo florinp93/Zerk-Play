@@ -128,7 +128,9 @@ final class TvPlaybackBridge {
     _nextUpDismissed = false;
 
     if ((_creditsStartMs ?? 0) <= 0 && durationMs != null && durationMs > 30000) {
-      _creditsStartMs = durationMs - 30000;
+      // Fallback: trigger ~90 s before end so the countdown lands inside the
+      // typical credits window (most TV shows start credits 1-4 min from end).
+      _creditsStartMs = durationMs - 90000;
     }
 
     if (seriesId != null && seriesId.isNotEmpty) {
@@ -421,6 +423,49 @@ final class TvPlaybackBridge {
       debugPrint('[TvPlaybackBridge] Auto-selecting subtitle: ${match.label}');
       controller.selectSubtitleTrack(track: match);
     }
+  }
+
+  /// Returns the ISO-639-1 language code of the subtitle track that is
+  /// currently selected in the player, or null if none is active.
+  ///
+  /// Reads the live [controller.playerState] so it reflects manual track
+  /// changes the user makes through the overlay UI.  Falls back to the
+  /// language of [_pendingSubtitle] if ExoPlayer tracks aren't available yet.
+  String? get currentSubtitleLanguage {
+    final selected = controller.playerState.subtitleTracks
+        .where((t) => t.isSelected && !t.isExternal)
+        .map((t) => _normLang(t.language))
+        .where((l) => l.isNotEmpty)
+        .firstOrNull;
+    if (selected != null) return selected;
+    final pending = _normLang(_pendingSubtitle?.language);
+    return pending.isNotEmpty ? pending : null;
+  }
+
+  /// Picks the best [EmbySubtitleStream] from [streams] for [preferredLang].
+  ///
+  /// Priority: exact language match → English fallback → null.
+  /// External (delivery) streams are included so they work the same way as
+  /// embedded ones do on the first episode.
+  EmbySubtitleStream? pickSubtitleForLanguage(
+    List<EmbySubtitleStream> streams,
+    String? preferredLang,
+  ) {
+    if (streams.isEmpty) return null;
+    final want = _normLang(preferredLang);
+
+    EmbySubtitleStream? exactMatch;
+    EmbySubtitleStream? englishMatch;
+    for (final s in streams) {
+      final lang = _normLang(s.language);
+      if (want.isNotEmpty && lang == want) {
+        exactMatch ??= s;
+      }
+      if (lang == 'en') {
+        englishMatch ??= s;
+      }
+    }
+    return exactMatch ?? englishMatch;
   }
 
   SubtitleTrack? _matchEmbeddedSubtitle(

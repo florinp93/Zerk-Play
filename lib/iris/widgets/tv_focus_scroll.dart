@@ -33,7 +33,7 @@ final class TvFocusScrollItem extends StatelessWidget {
     if (!scrollController.hasClients) return;
     Scrollable.ensureVisible(
       context,
-      alignment: 0.1,
+      alignment: 0.4,
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
     );

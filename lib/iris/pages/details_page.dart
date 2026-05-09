@@ -258,6 +258,7 @@ final class _DetailsPageState extends State<DetailsPage> with RouteAware {
                                         Row(
                                           children: [
                                             FilledButton.icon(
+                                              autofocus: true,
                                               onPressed: audio == null
                                                   ? null
                                                   : () => _startPlayback(
@@ -704,10 +705,13 @@ final class _SeriesBrowserState extends State<_SeriesBrowser> {
     _lastWatchedSeasonIdFuture ??= _loadLastWatchedSeasonId(services);
     if (!_episodesLayoutLoaded) {
       _episodesLayoutLoaded = true;
-      ShowDetailsPrefs.loadEpisodesLayout().then((value) {
-        if (!mounted) return;
-        setState(() => _episodesLayout = value);
-      });
+      // On TV only list layout is supported; skip loading the saved preference.
+      if (!isTvPlatform) {
+        ShowDetailsPrefs.loadEpisodesLayout().then((value) {
+          if (!mounted) return;
+          setState(() => _episodesLayout = value);
+        });
+      }
     }
   }
 
@@ -730,6 +734,8 @@ final class _SeriesBrowserState extends State<_SeriesBrowser> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
+                  // List/grid toggle is only available on desktop.
+                  if (!isTvPlatform) ...[
                   IconButton(
                     tooltip: context.l10n.listView,
                     onPressed: () async {
@@ -756,6 +762,7 @@ final class _SeriesBrowserState extends State<_SeriesBrowser> {
                           : scheme.onSurface.withValues(alpha: 0.72),
                     ),
                   ),
+                  ],
                 ],
               ),
               const SizedBox(height: 12),
@@ -864,10 +871,13 @@ final class _SeasonBrowserState extends State<_SeasonBrowser> {
     super.didChangeDependencies();
     if (_episodesLayoutLoaded) return;
     _episodesLayoutLoaded = true;
-    ShowDetailsPrefs.loadEpisodesLayout().then((value) {
-      if (!mounted) return;
-      setState(() => _episodesLayout = value);
-    });
+    // On TV only list layout is supported; skip loading the saved preference.
+    if (!isTvPlatform) {
+      ShowDetailsPrefs.loadEpisodesLayout().then((value) {
+        if (!mounted) return;
+        setState(() => _episodesLayout = value);
+      });
+    }
   }
 
   @override
@@ -889,6 +899,7 @@ final class _SeasonBrowserState extends State<_SeasonBrowser> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
+                  if (!isTvPlatform) ...[
                   IconButton(
                     tooltip: context.l10n.listView,
                     onPressed: () async {
@@ -915,6 +926,7 @@ final class _SeasonBrowserState extends State<_SeasonBrowser> {
                           : scheme.onSurface.withValues(alpha: 0.72),
                     ),
                   ),
+                  ],
                 ],
               ),
               const SizedBox(height: 12),
@@ -995,27 +1007,33 @@ final class _EpisodesListState extends State<_EpisodesList> {
             builder: (context, constraints) {
               const minTile = 340.0;
               final cols = max(1, (constraints.maxWidth / minTile).floor());
-              return GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: cols,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 16 / 13,
+              // FocusTraversalGroup ensures D-PAD navigates row-by-row within
+              // the grid instead of jumping to the section below.
+              return FocusTraversalGroup(
+                policy: ReadingOrderTraversalPolicy(),
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  clipBehavior: Clip.none,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: cols,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 16 / 13,
+                  ),
+                  itemCount: episodes.length,
+                  itemBuilder: (context, index) {
+                    final ep = episodes[index];
+                    return _EpisodeGridTile(
+                      episode: ep,
+                      isWatched: _playedOverrides[ep.id] ?? ep.isPlayed,
+                      onOpenDetails: () => context.push('/details/${ep.id}'),
+                      onPlay: () =>
+                          _playEpisode(context: context, services: services, episodeId: ep.id),
+                      onToggleWatched: () => _toggleWatched(ep),
+                    );
+                  },
                 ),
-                itemCount: episodes.length,
-                itemBuilder: (context, index) {
-                  final ep = episodes[index];
-                  return _EpisodeGridTile(
-                    episode: ep,
-                    isWatched: _playedOverrides[ep.id] ?? ep.isPlayed,
-                    onOpenDetails: () => context.push('/details/${ep.id}'),
-                    onPlay: () =>
-                        _playEpisode(context: context, services: services, episodeId: ep.id),
-                    onToggleWatched: () => _toggleWatched(ep),
-                  );
-                },
               );
             },
           );
@@ -1341,7 +1359,12 @@ final class _EpisodeGridTile extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            Row(
+            // On TV, exclude buttons from individual focus so D-PAD Down
+            // moves between grid rows instead of stepping through buttons.
+            // The card itself (OttFocusableCard above) is the TV focus target.
+            ExcludeFocus(
+              excluding: isTvPlatform,
+              child: Row(
               children: [
                 IconButton.filledTonal(
                   iconSize: 18,
@@ -1372,6 +1395,7 @@ final class _EpisodeGridTile extends StatelessWidget {
                         ),
                   ),
               ],
+            ),
             ),
           ],
         ),
@@ -1537,47 +1561,47 @@ final class _SimilarCard extends StatelessWidget {
     return SizedBox(
       width: 320,
       height: 180,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          OttFocusableCard(
-            onPressed: onOpenDetails,
-            borderRadius: 16,
-            child: Image.network(
+      child: OttFocusableCard(
+        onPressed: onOpenDetails,
+        borderRadius: 16,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(
               imageUri.toString(),
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) =>
                   const ColoredBox(color: Colors.black12),
             ),
-          ),
-          const IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    Color(0xCC000000),
-                    Color(0x00000000),
-                  ],
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Color(0xCC000000),
+                      Color(0x00000000),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          Positioned(
-            left: 12,
-            right: 12,
-            bottom: 10,
-            child: Text(
-              item.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 10,
+              child: Text(
+                item.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1644,35 +1668,43 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
   @override
   Widget build(BuildContext context) {
     if (widget.itemCount <= 0) return const SizedBox.shrink();
+    const double vPad = 10;
     final tv = isTvPlatform;
     final viewportWidth = _controller.hasClients
         ? _controller.position.viewportDimension
         : MediaQuery.sizeOf(context).width;
     final jump = viewportWidth * 0.85;
+    // Extra vertical padding lets the focus glow / scale overflow without being
+    // clipped by the SizedBox.  The list itself is inset by vPad on each side.
     return SizedBox(
-      height: widget.height,
+      height: widget.height + vPad * 2,
       child: Stack(
-        fit: StackFit.expand,
+        clipBehavior: Clip.none,
         children: [
-          ListView.separated(
-            controller: _controller,
-            scrollDirection: Axis.horizontal,
-            itemCount: widget.itemCount,
-            padding: EdgeInsets.zero,
-            cacheExtent: tv ? 1500 : null,
-            separatorBuilder: (context, index) => const SizedBox(width: 12),
-            itemBuilder: tv
-                ? (context, index) => TvFocusScrollItem(
-                      scrollController: _controller,
-                      child: widget.itemBuilder(context, index),
-                    )
-                : widget.itemBuilder,
+          Positioned.fill(
+            top: vPad,
+            bottom: vPad,
+            child: ListView.separated(
+              controller: _controller,
+              scrollDirection: Axis.horizontal,
+              itemCount: widget.itemCount,
+              padding: EdgeInsets.zero,
+              clipBehavior: Clip.none,
+              cacheExtent: tv ? 1500 : null,
+              separatorBuilder: (context, index) => const SizedBox(width: 12),
+              itemBuilder: tv
+                  ? (context, index) => TvFocusScrollItem(
+                        scrollController: _controller,
+                        child: widget.itemBuilder(context, index),
+                      )
+                  : widget.itemBuilder,
+            ),
           ),
           if (!tv && _canScrollLeft)
             Positioned(
               left: 8,
-              top: 0,
-              bottom: 0,
+              top: vPad,
+              bottom: vPad,
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: _RowNavButton(
@@ -1684,8 +1716,8 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
           if (!tv && _canScrollRight)
             Positioned(
               right: 8,
-              top: 0,
-              bottom: 0,
+              top: vPad,
+              bottom: vPad,
               child: Align(
                 alignment: Alignment.centerRight,
                 child: _RowNavButton(

@@ -217,10 +217,19 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
       if (selectedSubtitle != null) {
         bridge.setInitialTrackSelection(subtitle: selectedSubtitle);
       }
+      // Prefer item-level markers; fall back to PlaybackInfo source markers
+      // (fresher data — Emby may have run detection between item-cache and now).
+      final piSrc = info.activeMediaSource;
       bridge.configureSegments(
-        introStartMs: item.introStartTicks != null ? item.introStartTicks! ~/ 10000 : null,
-        introEndMs: item.introEndTicks != null ? item.introEndTicks! ~/ 10000 : null,
-        creditsStartMs: item.creditsStartTicks != null ? item.creditsStartTicks! ~/ 10000 : null,
+        introStartMs: (item.introStartTicks ?? piSrc.introStartTicks) != null
+            ? (item.introStartTicks ?? piSrc.introStartTicks)! ~/ 10000
+            : null,
+        introEndMs: (item.introEndTicks ?? piSrc.introEndTicks) != null
+            ? (item.introEndTicks ?? piSrc.introEndTicks)! ~/ 10000
+            : null,
+        creditsStartMs: (item.creditsStartTicks ?? piSrc.creditsStartTicks) != null
+            ? (item.creditsStartTicks ?? piSrc.creditsStartTicks)! ~/ 10000
+            : null,
         seriesId: item.type == 'Episode' ? item.seriesId : null,
         durationMs: item.runTimeTicks != null ? item.runTimeTicks! ~/ 10000 : null,
       );
@@ -246,13 +255,33 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
             thumbnailUrl: thumbUri.toString(),
           );
 
+          // Carry the active subtitle language forward to the next episode.
+          // If the current episode had, say, Romanian subs selected we try to
+          // find Romanian on the new episode; if unavailable we fall back to
+          // English, then to nothing.
+          final activeLang = bridge.currentSubtitleLanguage;
+          final nextSubtitle = bridge.pickSubtitleForLanguage(
+            nextInfo.subtitleStreams,
+            activeLang,
+          );
+          if (nextSubtitle != null) {
+            bridge.setInitialTrackSelection(subtitle: nextSubtitle);
+          }
+
+          final nextPiSrc = nextInfo.activeMediaSource;
           final result = await bridge.queueAndPlayNext(
             mediaItem: nextMediaItem,
             itemId: nextItem.id,
             info: nextInfo,
-            introStartMs: nextItem.introStartTicks != null ? nextItem.introStartTicks! ~/ 10000 : null,
-            introEndMs: nextItem.introEndTicks != null ? nextItem.introEndTicks! ~/ 10000 : null,
-            creditsStartMs: nextItem.creditsStartTicks != null ? nextItem.creditsStartTicks! ~/ 10000 : null,
+            introStartMs: (nextItem.introStartTicks ?? nextPiSrc.introStartTicks) != null
+                ? (nextItem.introStartTicks ?? nextPiSrc.introStartTicks)! ~/ 10000
+                : null,
+            introEndMs: (nextItem.introEndTicks ?? nextPiSrc.introEndTicks) != null
+                ? (nextItem.introEndTicks ?? nextPiSrc.introEndTicks)! ~/ 10000
+                : null,
+            creditsStartMs: (nextItem.creditsStartTicks ?? nextPiSrc.creditsStartTicks) != null
+                ? (nextItem.creditsStartTicks ?? nextPiSrc.creditsStartTicks)! ~/ 10000
+                : null,
             seriesId: nextItem.type == 'Episode' ? nextItem.seriesId : null,
             durationMs: nextItem.runTimeTicks != null ? nextItem.runTimeTicks! ~/ 10000 : null,
           );
@@ -272,7 +301,11 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
                 playbackInfo: nextInfo,
                 startPositionTicks: 0,
                 selectedAudio: playbackPrefs.pickAudio(nextInfo.audioStreams) ?? nextInfo.audioStreams.first,
-                selectedSubtitle: playbackPrefs.pickSubtitle(nextInfo.subtitleStreams),
+                // Use the same language-matching logic for the full-nav path.
+                selectedSubtitle: bridge.pickSubtitleForLanguage(
+                  nextInfo.subtitleStreams,
+                  activeLang,
+                ),
               ),
             );
           }
@@ -2243,16 +2276,20 @@ EmbySubtitleStream? _pickNextSubtitle({
   required EmbySubtitleStream? preferred,
 }) {
   if (preferred == null) return null;
+  final streams = nextPlaybackInfo.subtitleStreams;
+  if (streams.isEmpty) return null;
   final preferredLang = _normLang(preferred.language);
+  // 1. Exact language match.
   if (preferredLang.isNotEmpty) {
-    for (final s in nextPlaybackInfo.subtitleStreams) {
+    for (final s in streams) {
       if (_normLang(s.language) == preferredLang) return s;
     }
   }
-  final defaults =
-      nextPlaybackInfo.subtitleStreams.where((s) => s.isDefault).toList(growable: false);
-  if (defaults.isNotEmpty) return defaults.first;
-  return nextPlaybackInfo.subtitleStreams.isEmpty ? null : nextPlaybackInfo.subtitleStreams.first;
+  // 2. English fallback (so subtitles don't silently disappear on the next ep).
+  for (final s in streams) {
+    if (_normLang(s.language) == 'en') return s;
+  }
+  return null;
 }
 
 String _normLang(String? language) {

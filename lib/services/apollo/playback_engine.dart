@@ -340,7 +340,7 @@ final class PlaybackEngine {
     final ms = duration.inMilliseconds;
     if (ms <= 0) return;
     if (ms <= 30000) return;
-    _creditsStartMs = ms - 30000;
+    _creditsStartMs = ms - 90000;
     _debug('credits fallback durationMs=$ms creditsStartMs=$_creditsStartMs');
   }
 

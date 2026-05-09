@@ -114,6 +114,7 @@ Future<void> showSettingsDialog({
                       },
                     ),
                   ),
+                  if (isDesktop) ...[
                   const SizedBox(height: 14),
                   OutlinedButton(
                     onPressed: () async {
@@ -134,6 +135,7 @@ Future<void> showSettingsDialog({
                     },
                     child: Text(l10n.playerSettings),
                   ),
+                  ],
                   const SizedBox(height: 10),
                   OutlinedButton(
                     onPressed: () => showArtemisConnectionDiagnosticsDialog(

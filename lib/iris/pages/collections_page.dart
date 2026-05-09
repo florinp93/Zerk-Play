@@ -608,24 +608,32 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
         ? _controller.position.viewportDimension
         : MediaQuery.sizeOf(context).width;
     final jump = viewportWidth * 0.85;
+    // Extra vertical padding so the scale-up glow can bleed outside the row
+    // without being clipped by the SizedBox or the Stack.
+    const double vPad = 10;
     return SizedBox(
-      height: widget.height,
+      height: widget.height + vPad * 2,
       child: Stack(
-        fit: StackFit.expand,
+        clipBehavior: Clip.none,
         children: [
-          ListView.separated(
-            controller: _controller,
-            scrollDirection: Axis.horizontal,
-            itemCount: widget.itemCount,
-            padding: EdgeInsets.zero,
-            cacheExtent: tv ? 1500 : null,
-            separatorBuilder: (context, index) => const SizedBox(width: 12),
-            itemBuilder: tv
-                ? (context, index) => TvFocusScrollItem(
-                      scrollController: _controller,
-                      child: widget.itemBuilder(context, index),
-                    )
-                : widget.itemBuilder,
+          Positioned.fill(
+            top: vPad,
+            bottom: vPad,
+            child: ListView.separated(
+              clipBehavior: Clip.none,
+              controller: _controller,
+              scrollDirection: Axis.horizontal,
+              itemCount: widget.itemCount,
+              padding: EdgeInsets.zero,
+              cacheExtent: tv ? 1500 : null,
+              separatorBuilder: (context, index) => const SizedBox(width: 12),
+              itemBuilder: tv
+                  ? (context, index) => TvFocusScrollItem(
+                        scrollController: _controller,
+                        child: widget.itemBuilder(context, index),
+                      )
+                  : widget.itemBuilder,
+            ),
           ),
           if (!tv && _canScrollLeft)
             Positioned(

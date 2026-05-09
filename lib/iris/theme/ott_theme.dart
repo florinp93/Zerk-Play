@@ -83,6 +83,24 @@ ThemeData ottDarkTheme() {
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         textStyle: const TextStyle(fontWeight: FontWeight.w600),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ).copyWith(
+        // Bright white border + elevated overlay when focused (TV D-PAD navigation).
+        side: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.focused)) {
+            return const BorderSide(color: Colors.white, width: 2.5);
+          }
+          return BorderSide.none;
+        }),
+        overlayColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.focused)) {
+            return Colors.white.withValues(alpha: 0.18);
+          }
+          return null;
+        }),
+        elevation: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.focused)) return 8;
+          return null;
+        }),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -90,6 +108,23 @@ ThemeData ottDarkTheme() {
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         side: const BorderSide(color: outline),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ).copyWith(
+        side: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.focused)) {
+            return const BorderSide(color: Colors.white, width: 2.5);
+          }
+          return const BorderSide(color: outline);
+        }),
+        overlayColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.focused)) {
+            return Colors.white.withValues(alpha: 0.14);
+          }
+          return null;
+        }),
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.focused)) return Colors.white;
+          return null;
+        }),
       ),
     ),
     iconTheme: const IconThemeData(color: onSurface),
