@@ -1,3 +1,8 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart';
+
+import '../../core/http/app_http_client.dart';
 import '../../core/storage/shared_preferences_store.dart';
 import '../../services/artemis/artemis_service.dart';
 import '../../services/apollo/apollo_service.dart';
@@ -39,23 +44,30 @@ final class AppServices {
       if (saved != null && saved.trim().isNotEmpty) {
         jellyseerrBaseUrl = Uri.parse(saved.trim());
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[AppServices] Failed to parse Jellyseerr URL from prefs: $e');
+    }
     jellyseerrApiKey = (await store.getString(ConfigService.kJellyseerrApiKey) ?? '').trim();
     jellyseerrBaseUrl ??= Uri.parse('https://example.invalid');
+    debugPrint('[AppServices] Artemis config: baseUrl=$jellyseerrBaseUrl, apiKeyPresent=${jellyseerrApiKey.isNotEmpty}');
 
+    final deviceName = (!kIsWeb && Platform.isAndroid) ? 'Android TV' : 'Windows';
     final janus = JanusService(
       store: store,
       defaultServerUrl: 'https://example.invalid',
+      deviceName: deviceName,
     );
     await janus.init();
     await janus.restoreSession();
 
     final hermes = HermesService(janus: janus);
     final apollo = ApolloService(janus: janus);
+    final jellyseerrHttp = createJellyseerrHttpClient();
     final artemis = ArtemisService(
       store: store,
       apiKey: jellyseerrApiKey,
       baseUrl: jellyseerrBaseUrl,
+      httpClient: jellyseerrHttp,
     );
     await artemis.init();
 

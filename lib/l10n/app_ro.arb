@@ -34,6 +34,23 @@
   "youMightEnjoy": "S-ar putea să-ți placă",
   "yourNextBinge": "Următorul tău maraton",
   "trendingUnavailable": "Tendințe indisponibile",
+  "artemisConnectionFailed": "Nu pot accesa *seerr. Verifică URL-ul, cheia API și conexiunea la internet.",
+  "artemisConnectionFailedCertificate": "Nu pot accesa *seerr: problemă HTTPS sau certificat. Verifică URL-ul, lanțul de certificate și că folosești adresa de bază *seerr (nu cea Emby).",
+  "artemisConnectionFailedDns": "Nu pot accesa *seerr: nu pot rezolva numele serverului. Verifică DNS-ul Wi‑Fi (încearcă să dezactivezi DNS privat) sau URL-ul introdus.",
+  "artemisConnectionFailedNetwork": "Nu pot accesa *seerr: eroare de rețea (timeout, refuz sau indisponibil). Verifică că TV-ul e online, serverul rulează și DNS/IPv6 pentru domeniu.",
+  "artemisWrongServerNotJellyseerr": "Acest URL nu este serverul *seerr (de exemplu indică Emby). Folosește adresa de bază Jellyseerr — adesea un subdomeniu separat, ex. https://request.example.com — nu URL-ul Emby.",
+  "artemisDiagnosticsTitle": "Diagnostic conexiune *seerr",
+  "artemisDiagnosticsOpen": "Diagnostic conexiune",
+  "artemisDiagnosticsTest": "Testează conexiunea",
+  "artemisDiagnosticsSeerrUrl": "URL *seerr salvat",
+  "artemisDiagnosticsResult": "Rezultat",
+  "artemisDiagnosticsDebugLine": "Detaliu tehnic (pentru suport)",
+  "artemisDiagnosticsCopy": "Copiază detaliile",
+  "artemisDiagnosticsCopyDone": "Copiat în clipboard",
+  "artemisDiagnosticsNotConfigured": "Configurare incompletă: salvează mai întâi URL-ul și cheia API *seerr.",
+  "artemisDiagnosticsInfraTips": "Dacă doar acest dispozitiv eșuează:\n• Server: lanț TLS complet, SNI corect, TLS 1.2+; evită renegocierea TLS defectă.\n• DNS: verifică A și AAAA pentru hostul *seerr; corectează sau șterge AAAA invalid.\n• Android TV: încearcă fără DNS privat; verifică Pi-hole / DNS router.\n• Reverse proxy: hostul trebuie să ducă la Jellyseerr, nu Emby.",
+  "artemisDiagnosticsReachableYes": "Accesibil — Jellyseerr răspunde corect.",
+  "artemisDiagnosticsReachableNo": "Neaccesibil",
 
   "save": "Salvează",
   "cancel": "Anulează",
@@ -171,5 +188,23 @@
       "query": {}
     }
   },
-  "searchFailed": "Căutarea a eșuat"
+  "searchFailed": "Căutarea a eșuat",
+
+  "exitApp": "Închide aplicația",
+  "exitAppConfirm": "Ești sigur că vrei să închizi aplicația?",
+  "exit": "Închide",
+
+  "playerSettings": "Player / MPV…",
+  "playerSettingsMpvTitle": "Player (mpv)",
+  "playerSettingsMatchRefreshRate": "Potrivește refresh‑ul display‑ului cu videoclipul",
+  "playerSettingsMatchRefreshRateHelp": "Doar display principal. Poate clipi; multi‑monitor și HDR pot avea probleme. Implicit oprit.",
+  "playerSettingsMatchRefreshRateFullscreenOnly": "Doar pe ecran complet",
+  "playerSettingsMpvPathFull": "mpv.conf:\n{path}",
+  "@playerSettingsMpvPathFull": {
+    "placeholders": {
+      "path": {}
+    }
+  },
+  "playerSettingsMpvHelp": "Încărcat după valorile implicite aplicației, deci opțiunile de aici le pot suprascrie. Manual mpv: https://mpv.io/manual/master/",
+  "playerSettingsOpenConfigFolder": "Deschide folderul de configurare"
 }

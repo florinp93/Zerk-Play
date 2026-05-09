@@ -19,6 +19,8 @@ On first launch, you configure:
 
 Then you sign in with your Emby username + password on the next screen.
 
+**Android TV / pairing:** The \*seerr URL must be reachable **from the TV itself** (same URL that works on your PC may still fail if it uses `localhost` — that points at the TV). Prefer your Jellyseerr host’s **LAN IP** or **public HTTPS hostname**; ensure HTTPS, DNS, and firewall allow the TV.
+
 ### What You Get
 
 - A clean home experience for Movies and Shows

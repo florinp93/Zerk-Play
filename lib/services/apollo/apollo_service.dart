@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' show Directory, File, Platform;
 
 import 'package:flutter/foundation.dart';
 
 import '../../core/emby/models/emby_playback_info.dart';
+import '../../iris/player/mpv_config_service.dart';
 import '../janus/janus_service.dart';
-import 'mpv_device_profile.dart';
+import 'device_profiles.dart';
 
 final class ApolloService {
   ApolloService({required JanusService janus}) : _janus = janus;
@@ -15,18 +16,32 @@ final class ApolloService {
 
   Timer? _progressTimer;
 
+  Future<Set<String>> _passthroughCodecs() async {
+    if (Platform.isAndroid) return const {};
+    try {
+      final text = await MpvConfigService.readConfigText();
+      final conf = MpvConfigService.parseConf(text);
+      final spdif = conf['audio-spdif'] ?? '';
+      if (spdif.trim().isEmpty) return const {};
+      return spdif.split(',').map((s) => s.trim().toLowerCase()).toSet();
+    } catch (_) {
+      return const {};
+    }
+  }
+
   Future<EmbyPlaybackInfo> getPlaybackInfo(
     String itemId, {
     int? maxStreamingBitrate,
   }) async {
     final session = _janus.session;
+    final passthrough = await _passthroughCodecs();
     final json = await _janus.client.postJson(
       '/Items/$itemId/PlaybackInfo',
       queryParameters: {
         'UserId': session.userId,
       },
       body: {
-        'DeviceProfile': buildMpvDeviceProfile(),
+        'DeviceProfile': buildDeviceProfile(passthroughCodecs: passthrough),
         ...?maxStreamingBitrate == null
             ? null
             : <String, Object?>{
@@ -75,6 +90,7 @@ final class ApolloService {
 
   Future<void> registerCapabilities() async {
     final session = _janus.session;
+    final passthrough = await _passthroughCodecs();
     await _janus.client.postNoContent(
       '/Sessions/Capabilities',
       body: {
@@ -87,8 +103,10 @@ final class ApolloService {
           'SetVolume',
           'DisplayMessage',
         ],
-        'DeviceProfile': buildMpvDeviceProfile(),
-        'AppDescription': 'Zerk Play: High-Performance Windows Client',
+        'DeviceProfile': buildDeviceProfile(passthroughCodecs: passthrough),
+        'AppDescription': Platform.isAndroid
+            ? 'Zerk Play: Android TV Client'
+            : 'Zerk Play: High-Performance Windows Client',
         'DeviceId': session.deviceId,
       },
     );
@@ -110,7 +128,7 @@ final class ApolloService {
         'IsPaused': false,
         'PositionTicks': positionTicks,
         'DeviceId': session.deviceId,
-        'DeviceName': 'Zerk Play Windows',
+        'DeviceName': Platform.isAndroid ? 'Zerk Play Android TV' : 'Zerk Play Windows',
       },
     );
   }

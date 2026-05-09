@@ -9,6 +9,8 @@ import '../../core/emby/models/emby_item.dart';
 import '../../l10n/l10n.dart';
 import '../widgets/ott_focusable.dart';
 import '../widgets/ott_shimmer.dart';
+import '../widgets/tv_sidebar_shell.dart' show isTvPlatform;
+import '../widgets/tv_text_field.dart';
 
 enum LibraryType {
   movies,
@@ -35,6 +37,21 @@ final class LibraryPage extends StatefulWidget {
   State<LibraryPage> createState() => _LibraryPageState();
 }
 
+enum _SortBy {
+  nameAz('SortName', 'Ascending', 'Name (A–Z)'),
+  nameZa('SortName', 'Descending', 'Name (Z–A)'),
+  dateAddedNew('DateCreated', 'Descending', 'Date added (newest)'),
+  dateAddedOld('DateCreated', 'Ascending', 'Date added (oldest)'),
+  yearNew('ProductionYear,SortName', 'Descending', 'Year (newest)'),
+  yearOld('ProductionYear,SortName', 'Ascending', 'Year (oldest)'),
+  rating('CommunityRating', 'Descending', 'Rating');
+
+  const _SortBy(this.sortBy, this.sortOrder, this.label);
+  final String sortBy;
+  final String sortOrder;
+  final String label;
+}
+
 final class _LibraryPageState extends State<LibraryPage> with RouteAware {
   static const _pageSize = 60;
   final _controller = ScrollController();
@@ -42,6 +59,7 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
   final _items = <EmbyItem>[];
   final Set<String> _selectedGenres = {};
   int? _selectedYear;
+  _SortBy _sortBy = _SortBy.nameAz;
   PageRoute<dynamic>? _route;
 
   bool _loading = false;
@@ -76,6 +94,7 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
       _items.clear();
       _selectedGenres.clear();
       _selectedYear = null;
+      _sortBy = _SortBy.nameAz;
       _loading = false;
       _hasMore = true;
       _error = null;
@@ -101,6 +120,8 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
       _loading = false;
       _hasMore = true;
       _error = null;
+      _selectedGenres.clear();
+      _selectedYear = null;
     });
     unawaited(_controller.animateTo(
       0,
@@ -164,6 +185,8 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
         includeItemTypes: _includeTypes(),
         startIndex: _items.length,
         limit: _pageSize,
+        sortBy: _sortBy.sortBy,
+        sortOrder: _sortBy.sortOrder,
       );
       if (!mounted) return;
       setState(() {
@@ -230,7 +253,7 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
                       if (_selectedYear != null)
                         InputChip(
                           label: Text(context.l10n.yearChip(_selectedYear!)),
-                          onDeleted: () => _applyFilters(genres: _selectedGenres, year: null),
+                          onDeleted: () => _applyFilters(genres: _selectedGenres, year: null, sort: _sortBy),
                         ),
                       for (final g in _selectedGenres)
                         InputChip(
@@ -238,7 +261,7 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
                           onDeleted: () {
                             final next = Set<String>.of(_selectedGenres);
                             next.remove(g);
-                            _applyFilters(genres: next, year: _selectedYear);
+                            _applyFilters(genres: next, year: _selectedYear, sort: _sortBy);
                           },
                         ),
                     ],
@@ -330,10 +353,11 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
   void _openFilters(BuildContext context) {
     final currentGenres = Set<String>.of(_selectedGenres);
     final currentYear = _selectedYear;
+    final currentSort = _sortBy;
     final availableGenres = _availableGenres();
     final availableYears = _availableYears();
 
-    final anchor = _anchorRect();
+    final anchor = isTvPlatform ? null : _anchorRect();
     final Future<_FilterResult?> future = anchor == null
         ? showModalBottomSheet<_FilterResult>(
             context: context,
@@ -347,6 +371,7 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
                   availableYears: availableYears,
                   initialGenres: currentGenres,
                   initialYear: currentYear,
+                  initialSort: currentSort,
                 ),
               );
             },
@@ -362,6 +387,7 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
                   availableYears: availableYears,
                   initialGenres: currentGenres,
                   initialYear: currentYear,
+                  initialSort: currentSort,
                 ),
               );
             },
@@ -369,7 +395,7 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
 
     future.then((result) {
       if (!mounted || result == null) return;
-      _applyFilters(genres: result.genres, year: result.year);
+      _applyFilters(genres: result.genres, year: result.year, sort: result.sort);
     });
   }
 
@@ -383,16 +409,27 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
     return Rect.fromLTWH(topLeft.dx, topLeft.dy, box.size.width, box.size.height);
   }
 
-  void _applyFilters({required Set<String> genres, required int? year}) {
+  void _applyFilters({required Set<String> genres, required int? year, required _SortBy sort}) {
+    final sortChanged = sort != _sortBy;
     setState(() {
       _selectedGenres
         ..clear()
         ..addAll(genres);
       _selectedYear = year;
+      _sortBy = sort;
       _error = null;
+      if (sortChanged) {
+        _items.clear();
+        _hasMore = true;
+        _loading = false;
+      }
     });
     if (_controller.hasClients) _controller.jumpTo(0);
-    _ensureEnoughMatches();
+    if (sortChanged) {
+      _loadMore();
+    } else {
+      _ensureEnoughMatches();
+    }
   }
 
   List<EmbyItem> _filteredItems() {
@@ -502,10 +539,11 @@ final class _AnchoredPopup extends StatelessWidget {
 }
 
 final class _FilterResult {
-  const _FilterResult({required this.genres, required this.year});
+  const _FilterResult({required this.genres, required this.year, required this.sort});
 
   final Set<String> genres;
   final int? year;
+  final _SortBy sort;
 }
 
 final class _FilterSheet extends StatefulWidget {
@@ -514,12 +552,14 @@ final class _FilterSheet extends StatefulWidget {
     required this.availableYears,
     required this.initialGenres,
     required this.initialYear,
+    required this.initialSort,
   });
 
   final List<String> availableGenres;
   final List<int> availableYears;
   final Set<String> initialGenres;
   final int? initialYear;
+  final _SortBy initialSort;
 
   @override
   State<_FilterSheet> createState() => _FilterSheetState();
@@ -528,6 +568,7 @@ final class _FilterSheet extends StatefulWidget {
 final class _FilterSheetState extends State<_FilterSheet> {
   late final Set<String> _genres;
   int? _year;
+  late _SortBy _sort;
   String _genreSearch = '';
 
   @override
@@ -535,6 +576,7 @@ final class _FilterSheetState extends State<_FilterSheet> {
     super.initState();
     _genres = Set<String>.of(widget.initialGenres);
     _year = widget.initialYear;
+    _sort = widget.initialSort;
   }
 
   @override
@@ -560,12 +602,23 @@ final class _FilterSheetState extends State<_FilterSheet> {
                   setState(() {
                     _genres.clear();
                     _year = null;
+                    _sort = _SortBy.nameAz;
                     _genreSearch = '';
                   });
                 },
                 child: Text(context.l10n.clear),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<_SortBy>(
+            key: ValueKey(_sort),
+            initialValue: _sort,
+            decoration: const InputDecoration(labelText: 'Sort by'),
+            items: _SortBy.values
+                .map((s) => DropdownMenuItem(value: s, child: Text(s.label)))
+                .toList(),
+            onChanged: (v) { if (v != null) setState(() => _sort = v); },
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<int?>(
@@ -581,7 +634,8 @@ final class _FilterSheetState extends State<_FilterSheet> {
             onChanged: (v) => setState(() => _year = v),
           ),
           const SizedBox(height: 12),
-          TextField(
+          TvTextField(
+            value: _genreSearch,
             decoration: InputDecoration(
               labelText: context.l10n.genre,
               prefixIcon: const Icon(Icons.search),
@@ -619,7 +673,7 @@ final class _FilterSheetState extends State<_FilterSheet> {
             width: double.infinity,
             child: FilledButton(
               onPressed: () => Navigator.of(context).pop(
-                _FilterResult(genres: _genres, year: _year),
+                _FilterResult(genres: _genres, year: _year, sort: _sort),
               ),
               child: Text(context.l10n.apply),
             ),

@@ -1,37 +1,49 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../app/app.dart';
 import '../../app/services/app_services.dart';
 import '../../l10n/l10n.dart';
 import '../player/playback_prefs.dart';
+import '../player/subtitle_prefs.dart';
 import '../settings/app_prefs.dart';
 import '../widgets/ott_focusable.dart';
+import 'artemis_connection_diagnostics.dart';
+import 'player_mpv_settings_dialog.dart';
 import 'preferences_form.dart';
+import 'subtitle_appearance_controls.dart';
 
 Future<void> showSettingsDialog({
   required BuildContext context,
   required AppServices services,
 }) async {
-  final prefs = await PlaybackPrefs.load();
+  var playbackPrefs = await PlaybackPrefs.load();
   final appPrefs = await AppPrefs.load();
   if (!context.mounted) return;
 
-  var quality = prefs.qualityPreference;
-  var audioLang = prefs.audioLanguage.trim().isEmpty ? 'auto' : prefs.audioLanguage.trim();
+  var quality = playbackPrefs.qualityPreference;
+  var audioLang =
+      playbackPrefs.audioLanguage.trim().isEmpty ? 'auto' : playbackPrefs.audioLanguage.trim();
   if (audioLang != 'en' && audioLang != 'ro') audioLang = 'auto';
 
   var subtitleSelection = 'auto';
-  if (prefs.subtitleMode == SubtitlePreferenceMode.off) {
+  if (playbackPrefs.subtitleMode == SubtitlePreferenceMode.off) {
     subtitleSelection = 'off';
-  } else if (prefs.subtitleMode == SubtitlePreferenceMode.language) {
-    final lang = prefs.subtitleLanguage.trim();
+  } else if (playbackPrefs.subtitleMode == SubtitlePreferenceMode.language) {
+    final lang = playbackPrefs.subtitleLanguage.trim();
     subtitleSelection = (lang == 'en' || lang == 'ro') ? lang : 'auto';
   }
   var appLanguage = appPrefs.language;
   var showFeedbackButton = appPrefs.showFeedbackButton;
+  var startFullscreen = appPrefs.startFullscreen;
+  var matchHz = playbackPrefs.matchDisplayRefreshRate;
+  var matchHzFsOnly = playbackPrefs.matchDisplayRefreshRateFullscreenOnly;
+  var subtitleAppearance = await SubtitlePrefs.load();
+  if (!context.mounted) return;
 
   await showDialog<void>(
     context: context,
@@ -39,14 +51,16 @@ Future<void> showSettingsDialog({
       return StatefulBuilder(
         builder: (context, setState) {
           final l10n = context.l10n;
+          final isDesktop = !Platform.isAndroid;
           return AlertDialog(
             title: Text(l10n.settings),
             content: SizedBox(
               width: 520,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                   PreferencesForm(
                     appLanguage: appLanguage,
                     onAppLanguageChanged: (v) => setState(() => appLanguage = v),
@@ -59,7 +73,76 @@ Future<void> showSettingsDialog({
                     subtitleSelection: subtitleSelection,
                     onSubtitleSelectionChanged: (v) => setState(() => subtitleSelection = v),
                   ),
+                  if (isDesktop) ...[
+                    const Divider(height: 28),
+                    Text('Display', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 4),
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Start in fullscreen'),
+                      subtitle: const Text('App launches without taskbar'),
+                      value: startFullscreen,
+                      onChanged: (v) => setState(() => startFullscreen = v),
+                    ),
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Match display refresh rate to video'),
+                      subtitle: const Text('Switches Hz at playback start (best-effort)'),
+                      value: matchHz,
+                      onChanged: (v) => setState(() => matchHz = v),
+                    ),
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Only while fullscreen'),
+                      value: matchHzFsOnly,
+                      onChanged: matchHz ? (v) => setState(() => matchHzFsOnly = v) : null,
+                    ),
+                  ],
+                  const Divider(height: 28),
+                  MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                      navigationMode: NavigationMode.directional,
+                    ),
+                    child: SubtitleAppearanceControls(
+                      value: subtitleAppearance,
+                      onChanged: (next) {
+                        SubtitlePrefs.save(next);
+                        setState(() => subtitleAppearance = next);
+                      },
+                    ),
+                  ),
                   const SizedBox(height: 14),
+                  OutlinedButton(
+                    onPressed: () async {
+                      final latest = await PlaybackPrefs.load();
+                      if (!context.mounted) return;
+                      await showPlayerMpvSettingsDialog(
+                        context: context,
+                        playbackPrefs: latest,
+                        onSavePlaybackPrefs: (next) async {
+                          await PlaybackPrefs.save(next);
+                          setState(() {
+                            playbackPrefs = next;
+                            matchHz = next.matchDisplayRefreshRate;
+                            matchHzFsOnly = next.matchDisplayRefreshRateFullscreenOnly;
+                          });
+                        },
+                      );
+                    },
+                    child: Text(l10n.playerSettings),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton(
+                    onPressed: () => showArtemisConnectionDiagnosticsDialog(
+                      context: context,
+                      services: services,
+                    ),
+                    child: Text(l10n.artemisDiagnosticsOpen),
+                  ),
+                  const SizedBox(height: 10),
                   OutlinedButton(
                     onPressed: () async {
                       await services.janus.logout();
@@ -71,6 +154,7 @@ Future<void> showSettingsDialog({
                     child: Text(l10n.signOut),
                   ),
                 ],
+              ),
               ),
             ),
             actions: [
@@ -85,22 +169,29 @@ Future<void> showSettingsDialog({
                     _ => (SubtitlePreferenceMode.auto, ''),
                   };
                   await PlaybackPrefs.save(
-                    prefs.copyWith(
+                    playbackPrefs.copyWith(
                       qualityPreference: quality,
                       audioLanguage: audioLang == 'auto' ? '' : audioLang,
                       subtitleMode: subtitleMode,
                       subtitleLanguage: subtitleLanguage,
+                      matchDisplayRefreshRate: matchHz,
+                      matchDisplayRefreshRateFullscreenOnly: matchHzFsOnly,
                     ),
                   );
-                  final nextAppPrefs = AppPrefs(
+                  final nextAppPrefs = appPrefs.copyWith(
                     language: appLanguage,
                     showFeedbackButton: showFeedbackButton,
+                    startFullscreen: startFullscreen,
                   );
                   await AppPrefs.save(nextAppPrefs);
                   if (context.mounted) {
                     final scope = AppUiScope.of(context);
                     scope.locale.value = nextAppPrefs.toLocale();
                     scope.showFeedbackButton.value = nextAppPrefs.showFeedbackButton;
+                    // Apply fullscreen change immediately.
+                    if (!Platform.isAndroid) {
+                      await windowManager.setFullScreen(startFullscreen);
+                    }
                   }
                   if (context.mounted) context.pop();
                 },

@@ -15,6 +15,8 @@ import '../../l10n/l10n.dart';
 import '../player/playback_prefs.dart';
 import '../widgets/ott_focusable.dart';
 import '../widgets/ott_shimmer.dart';
+import '../widgets/tv_focus_scroll.dart';
+import '../widgets/tv_sidebar_shell.dart' show isTvPlatform;
 import 'playback_page.dart';
 import 'show_details_prefs.dart';
 
@@ -472,6 +474,20 @@ final class _Poster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final child = SizedBox(
+      width: 240,
+      height: 360,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Image.network(
+          imageUri.toString(),
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) =>
+              const ColoredBox(color: Colors.black12),
+        ),
+      ),
+    );
+    if (isTvPlatform) return child;
     return SizedBox(
       width: 240,
       height: 360,
@@ -631,18 +647,21 @@ final class _GlassPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final surface = Theme.of(context).colorScheme.surfaceContainerHighest;
+    final decoration = BoxDecoration(
+      color: surface.withValues(alpha: isTvPlatform ? 0.72 : 0.42),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+    );
+
+    if (isTvPlatform) {
+      return Container(decoration: decoration, child: child);
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          decoration: BoxDecoration(
-            color: surface.withValues(alpha: 0.42),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          ),
-          child: child,
-        ),
+        child: Container(decoration: decoration, child: child),
       ),
     );
   }
@@ -1625,6 +1644,7 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
   @override
   Widget build(BuildContext context) {
     if (widget.itemCount <= 0) return const SizedBox.shrink();
+    final tv = isTvPlatform;
     final viewportWidth = _controller.hasClients
         ? _controller.position.viewportDimension
         : MediaQuery.sizeOf(context).width;
@@ -1639,10 +1659,16 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
             scrollDirection: Axis.horizontal,
             itemCount: widget.itemCount,
             padding: EdgeInsets.zero,
+            cacheExtent: tv ? 1500 : null,
             separatorBuilder: (context, index) => const SizedBox(width: 12),
-            itemBuilder: widget.itemBuilder,
+            itemBuilder: tv
+                ? (context, index) => TvFocusScrollItem(
+                      scrollController: _controller,
+                      child: widget.itemBuilder(context, index),
+                    )
+                : widget.itemBuilder,
           ),
-          if (_canScrollLeft)
+          if (!tv && _canScrollLeft)
             Positioned(
               left: 8,
               top: 0,
@@ -1655,7 +1681,7 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
                 ),
               ),
             ),
-          if (_canScrollRight)
+          if (!tv && _canScrollRight)
             Positioned(
               right: 8,
               top: 0,
@@ -1766,7 +1792,7 @@ String _mediaSourceLabel(EmbyMediaSource s) {
 
   final v = s.video;
   if (v != null) {
-    final res = _resolutionTag(v.height);
+    final res = _resolutionTag(v.width, v.height);
     if (name.isEmpty && res.isNotEmpty) parts.add(res);
     final range = _videoRangeTag(v.videoRange);
     if (range.isNotEmpty) parts.add(range);
@@ -1786,7 +1812,9 @@ List<String> _infoTags({
   final out = <String>[];
   final source = info.activeMediaSource;
 
-  final quality = _qualityTag(_resolutionTag(source.video?.height));
+  final quality = _qualityTag(
+    _resolutionTag(source.video?.width, source.video?.height),
+  );
   if (quality.isNotEmpty) out.add(quality);
 
   final range = _videoRangeTag(source.video?.videoRange);
@@ -1817,13 +1845,22 @@ String _qualityTag(String resolution) {
   }
 }
 
-String _resolutionTag(int? height) {
+String _resolutionTag(int? width, int? height) {
+  final w = width ?? 0;
   final h = height ?? 0;
-  if (h >= 2160) return '4K';
-  if (h >= 1440) return '1440p';
-  if (h >= 1080) return '1080p';
-  if (h >= 720) return '720p';
-  if (h >= 480) return '480p';
+  if (w <= 0 && h <= 0) return '';
+
+  if (w >= 3840 || h >= 2160) return '4K';
+
+  final minEdge =
+      (w > 0 && h > 0)
+          ? (w < h ? w : h)
+          : (w > 0 ? w : h);
+
+  if (minEdge >= 1440) return '1440p';
+  if (minEdge >= 1080) return '1080p';
+  if (minEdge >= 720) return '720p';
+  if (minEdge >= 480) return '480p';
   return '';
 }
 

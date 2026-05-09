@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../services/hephaestus/hephaestus_service.dart';
@@ -27,6 +30,7 @@ class _UpdaterWrapperState extends State<UpdaterWrapper> {
   }
 
   Future<void> _checkForUpdates() async {
+    if (!kIsWeb && Platform.isAndroid) return;
     final services = AppServicesScope.of(context);
     final skipped = await services.config.getSkippedUpdateVersion();
     final update = await services.hephaestus.checkForUpdate(skipped);

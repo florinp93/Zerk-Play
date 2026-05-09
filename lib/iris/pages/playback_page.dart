@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:ui';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_tv_media3/flutter_tv_media3.dart' as tv;
 import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -16,9 +18,14 @@ import '../../core/emby/models/emby_media_stream.dart';
 import '../../core/emby/models/emby_playback_info.dart';
 import '../../l10n/l10n.dart';
 import '../../services/apollo/playback_engine.dart';
+import '../../services/apollo/tv_playback_bridge.dart';
+import '../player/mpv_config_service.dart';
 import '../player/playback_prefs.dart';
 import '../player/subtitle_prefs.dart';
+import '../player/windows_display_refresh_rate.dart';
+import '../player/subtitle_prefs_tv_bridge.dart';
 import '../widgets/ott_shimmer.dart';
+import '../widgets/subtitle_appearance_controls.dart';
 
 enum _AspectMode {
   fit,
@@ -61,8 +68,8 @@ final class PlaybackPage extends StatefulWidget {
 }
 
 final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingObserver {
-  late final Player _player;
-  late final VideoController _controller;
+  Player? _player;
+  VideoController? _controller;
 
   AppServices? _services;
   PlaybackEngine? _engine;
@@ -84,16 +91,35 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
   Timer? _controlsHideTimer;
   bool _reportedStopped = false;
 
+  /// Android TV plays in a native [PlayerActivity]; hide the Flutter placeholder once it opens.
+  bool _tvNativePlayerOpened = false;
+
+  StreamSubscription<Track>? _trackListenSub;
+
+  /// Plain-text Flutter subtitle overlay; disabled on Windows where libass renders into the video.
+  bool get _useFlutterSubtitleOverlay =>
+      !_isAndroidTv && (!_isWindows || !_desktopUsesLibassRendering);
+
+  static bool get _desktopUsesLibassRendering =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+
   @override
   void initState() {
     super.initState();
-    _player = Player();
-    _controller = VideoController(
-      _player,
-      configuration: _isWindows
-          ? const VideoControllerConfiguration(hwdec: 'd3d11va')
-          : const VideoControllerConfiguration(),
-    );
+    if (!_isAndroidTv) {
+      final player = Player(
+        configuration: _desktopUsesLibassRendering
+            ? const PlayerConfiguration(libass: true)
+            : const PlayerConfiguration(),
+      );
+      _player = player;
+      _controller = VideoController(
+        player,
+        configuration: _isWindows
+            ? const VideoControllerConfiguration(hwdec: 'd3d11va')
+            : const VideoControllerConfiguration(),
+      );
+    }
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -106,7 +132,225 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
     _start();
   }
 
+  static bool get _isAndroidTv => !kIsWeb && Platform.isAndroid;
+
   Future<void> _start() async {
+    if (_isAndroidTv) {
+      await _startTv();
+      return;
+    }
+    await _startDesktop();
+  }
+
+  TvPlaybackBridge? _tvBridge;
+  StreamSubscription<String>? _tvPlayNextSub;
+  StreamSubscription<tv.PlayerState>? _tvDestroySub;
+  bool _tvPlaybackTeardownDone = false;
+
+  Future<void> _stopTvBridgeOnce() async {
+    if (_tvPlaybackTeardownDone) {
+      debugPrint('[BACK] _stopTvBridgeOnce: already done, skipping');
+      return;
+    }
+    _tvPlaybackTeardownDone = true;
+    _tvDestroySub?.cancel();
+    _tvDestroySub = null;
+    final bridge = _tvBridge;
+    _tvBridge = null;
+    if (bridge == null) {
+      debugPrint('[BACK] _stopTvBridgeOnce: bridge is null, skipping stopReporting');
+      return;
+    }
+    debugPrint('[BACK] _stopTvBridgeOnce: calling bridge.stopReporting()');
+    try {
+      await bridge.stopReporting();
+      debugPrint('[BACK] _stopTvBridgeOnce: stopReporting() completed');
+    } finally {
+      bridge.dispose();
+    }
+  }
+
+  Future<void> _startTv() async {
+    try {
+      final services = _services!;
+      final playbackPrefs = await PlaybackPrefs.load();
+      _playbackPrefs = playbackPrefs;
+
+      final args = widget.args;
+      final item = args?.item ?? await services.hermes.getItem(widget.itemId);
+      final info = args?.playbackInfo ??
+          await services.apollo.getPlaybackInfo(
+            item.id,
+            maxStreamingBitrate: playbackPrefs.maxStreamingBitrate(),
+          );
+      final startTicks = args?.startPositionTicks ?? (item.playbackPositionTicks ?? 0);
+
+      if (!mounted) return;
+      AppUiScope.of(context).lastPlaybackItemId.value = item.id;
+      setState(() {
+        _item = item;
+        _info = info;
+        _preparing = false;
+      });
+
+      final selectedAudio = args?.selectedAudio ?? playbackPrefs.pickAudio(info.audioStreams);
+      final selectedSubtitle =
+          args?.selectedSubtitle ?? playbackPrefs.pickSubtitle(info.subtitleStreams);
+
+      final bridge = TvPlaybackBridge(apollo: services.apollo);
+      _tvBridge = bridge;
+      final thumbUri = services.hermes.thumbImageUri(item, maxWidth: 1920);
+      final mediaItem = bridge.buildMediaItem(
+        itemId: item.id,
+        title: item.name,
+        info: info,
+        startPositionTicks: startTicks,
+        thumbnailUrl: thumbUri.toString(),
+      );
+
+      bridge.startReporting(
+        itemId: item.id,
+        info: info,
+        startPositionTicks: startTicks,
+      );
+
+      if (selectedSubtitle != null) {
+        bridge.setInitialTrackSelection(subtitle: selectedSubtitle);
+      }
+      bridge.configureSegments(
+        introStartMs: item.introStartTicks != null ? item.introStartTicks! ~/ 10000 : null,
+        introEndMs: item.introEndTicks != null ? item.introEndTicks! ~/ 10000 : null,
+        creditsStartMs: item.creditsStartTicks != null ? item.creditsStartTicks! ~/ 10000 : null,
+        seriesId: item.type == 'Episode' ? item.seriesId : null,
+        durationMs: item.runTimeTicks != null ? item.runTimeTicks! ~/ 10000 : null,
+      );
+
+      _tvPlayNextSub = bridge.playNextRequested.listen((nextItemId) async {
+        if (!mounted) return;
+        try {
+          setState(() => _loadingNext = true);
+          final nextItem = await services.hermes.getItem(nextItemId);
+          final nextInfo = await services.apollo.getPlaybackInfo(
+            nextItemId,
+            maxStreamingBitrate: playbackPrefs.maxStreamingBitrate(),
+          );
+          if (!mounted) return;
+          AppUiScope.of(context).lastPlaybackItemId.value = nextItem.id;
+
+          final thumbUri = services.hermes.thumbImageUri(nextItem, maxWidth: 720);
+          final nextMediaItem = bridge.buildMediaItem(
+            itemId: nextItem.id,
+            title: nextItem.name,
+            info: nextInfo,
+            startPositionTicks: 0,
+            thumbnailUrl: thumbUri.toString(),
+          );
+
+          final result = await bridge.queueAndPlayNext(
+            mediaItem: nextMediaItem,
+            itemId: nextItem.id,
+            info: nextInfo,
+            introStartMs: nextItem.introStartTicks != null ? nextItem.introStartTicks! ~/ 10000 : null,
+            introEndMs: nextItem.introEndTicks != null ? nextItem.introEndTicks! ~/ 10000 : null,
+            creditsStartMs: nextItem.creditsStartTicks != null ? nextItem.creditsStartTicks! ~/ 10000 : null,
+            seriesId: nextItem.type == 'Episode' ? nextItem.seriesId : null,
+            durationMs: nextItem.runTimeTicks != null ? nextItem.runTimeTicks! ~/ 10000 : null,
+          );
+
+          if (mounted) {
+            setState(() {
+              _item = nextItem;
+              _info = nextInfo;
+            });
+          }
+
+          if (result == null && mounted) {
+            context.pushReplacement(
+              '/play/${nextItem.id}',
+              extra: PlaybackArgs(
+                item: nextItem,
+                playbackInfo: nextInfo,
+                startPositionTicks: 0,
+                selectedAudio: playbackPrefs.pickAudio(nextInfo.audioStreams) ?? nextInfo.audioStreams.first,
+                selectedSubtitle: playbackPrefs.pickSubtitle(nextInfo.subtitleStreams),
+              ),
+            );
+          }
+        } catch (_) {
+        } finally {
+          if (mounted) setState(() => _loadingNext = false);
+        }
+      });
+
+      final controller = tv.FlutterTvMedia3.controller;
+
+      final prefTextLangs = <String>[];
+      if (selectedSubtitle != null && selectedSubtitle.language != null) {
+        prefTextLangs.add(selectedSubtitle.language!);
+      } else if (playbackPrefs.subtitleLanguage.trim().isNotEmpty) {
+        prefTextLangs.add(playbackPrefs.subtitleLanguage.trim());
+      }
+      final subAppearance = await SubtitlePrefs.load();
+      controller.setConfig(
+        playerSettings: tv.PlayerSettings(
+          preferredTextLanguages: prefTextLangs.isNotEmpty ? prefTextLangs : null,
+          preferredAudioLanguages: selectedAudio?.language != null
+              ? [selectedAudio!.language!]
+              : null,
+          forcedAutoEnable: selectedSubtitle != null,
+        ),
+        subtitleStyle: subtitleStyleFromPrefs(subAppearance),
+        saveSubtitleStyle: ({required subtitleStyle}) async {
+          await SubtitlePrefs.save(subtitlePrefsFromStyle(subtitleStyle));
+        },
+      );
+
+      // onPlaybackStopping fires from native *before* finish() completes,
+      // while PlaybackPage is guaranteed to be mounted.  We navigate here so
+      // we don't race with PlaybackPage being disposed by a stray back-key
+      // event that reaches the Flutter router.
+      controller.onPlaybackStopping = () async {
+        debugPrint('[BACK] onPlaybackStopping fired, mounted=$mounted');
+        unawaited(_stopTvBridgeOnce());
+        if (mounted) {
+          debugPrint('[BACK] onPlaybackStopping – calling _exitToUi');
+          _exitToUi(itemId: item.id);
+        } else {
+          debugPrint('[BACK] onPlaybackStopping – NOT mounted, skip _exitToUi');
+        }
+      };
+
+      _tvDestroySub?.cancel();
+      _tvDestroySub = controller.playerStateStream.listen((state) {
+        if (!state.activityDestroyed) return;
+        debugPrint('[BACK] activityDestroyed received, mounted=$mounted');
+        _tvDestroySub?.cancel();
+        _tvDestroySub = null;
+        final exitId = item.id;
+        unawaited(_stopTvBridgeOnce());
+        if (mounted) {
+          debugPrint('[BACK] activityDestroyed – calling _exitToUi');
+          _exitToUi(itemId: exitId);
+        } else {
+          debugPrint('[BACK] activityDestroyed – NOT mounted, skip _exitToUi');
+        }
+      });
+
+      await controller.openNativePlayer(
+        playlist: [mediaItem],
+      );
+      if (!mounted) return;
+      setState(() => _tvNativePlayerOpened = true);
+    } catch (e) {
+      if (!mounted) return;
+      if (_isAndroidTv) {
+        tv.FlutterTvMedia3.controller.onPlaybackStopping = null;
+      }
+      setState(() => _error = e);
+    }
+  }
+
+  Future<void> _startDesktop() async {
     try {
       final services = _services!;
       final prefs = ValueNotifier(await SubtitlePrefs.load());
@@ -138,19 +382,21 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
         _info = info;
       });
 
-      await _player.open(
+      await _applyWindowsMpvBuiltinDefaults();
+      await MpvConfigService.loadUserConfigIntoPlayer(_player!);
+
+      await _player!.open(
         Media(playbackPrefs.pickStreamUrl(info).toString()),
         play: false,
       );
-      await _prepareMpvForPlayback();
       try {
-        await _player.setVolume(playbackPrefs.volume);
+        await _player!.setVolume(playbackPrefs.volume);
       } catch (_) {}
-      _volumeSub ??= _player.stream.volume.listen(_onVolumeChanged);
+      _volumeSub ??= _player!.stream.volume.listen(_onVolumeChanged);
 
       final engine = PlaybackEngine(
         apollo: services.apollo,
-        player: _player,
+        player: _player!,
         itemId: item.id,
         info: info,
       );
@@ -212,6 +458,12 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
             : item.creditsStartTicks! ~/ 10000,
         seriesId: item.type == 'Episode' ? item.seriesId : null,
       );
+      await _syncWindowsMpvSubtitleStyle();
+      _trackListenSub?.cancel();
+      _trackListenSub = _player!.stream.track.listen((_) {
+        unawaited(_syncWindowsMpvSubtitleStyle());
+      });
+      unawaited(_refreshRateSyncForCurrentState());
       if (mounted) {
         setState(() => _preparing = false);
         _markUserActivity();
@@ -228,17 +480,100 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
     }
   }
 
-  Future<void> _prepareMpvForPlayback() async {
+  Future<void> _applyWindowsMpvBuiltinDefaults() async {
     if (!_isWindows) return;
-    final platform = _player.platform;
+    final platform = _player?.platform;
     if (platform == null) return;
     try {
       final dynamic p = platform;
+      // Hardware decoding defaults — user can override via mpv.conf.
       await p.setProperty('hwdec', 'd3d11va');
-      await p.setProperty('video-sync', 'display-resample');
       await p.setProperty('gpu-api', 'd3d11');
-      await p.setProperty('interpolation', 'yes');
+      // video-sync and interpolation are intentionally NOT set here;
+      // they are opt-in via mpv.conf because they increase CPU/GPU load.
     } catch (_) {}
+  }
+
+  Future<void> _syncWindowsMpvSubtitleStyle() async {
+    if (!_isWindows || _player == null || _subtitlePrefs == null) return;
+    final platform = _player!.platform;
+    if (platform == null) return;
+    final dynamic p = platform;
+    final sub = _player!.state.track.subtitle;
+    if (sub.id == 'no' || sub.id == 'auto') return;
+
+    final codec = (sub.codec ?? '').toLowerCase();
+    final isAss = codec.contains('ass') || codec.contains('ssa');
+
+    try {
+      await p.setProperty('sub-ass-override', isAss ? 'no' : 'yes');
+    } catch (_) {}
+
+    if (isAss) return;
+
+    final prefs = _subtitlePrefs!.value;
+    try {
+      await p.setProperty('sub-font', prefs.fontFamily);
+      final scale = (prefs.fontSize / 55.0).clamp(0.15, 4.0);
+      await p.setProperty('sub-scale', scale.toString());
+      final fg = Color(prefs.color);
+      await p.setProperty('sub-color', _mpvRgbHex(fg));
+      await p.setProperty('sub-border-size', prefs.borderSize.toString());
+      final outline = Color(prefs.borderColor);
+      await p.setProperty('sub-border-color', _mpvRgbHex(outline));
+      await p.setProperty('sub-margin-y', prefs.marginY.round().toString());
+      if (prefs.backgroundVisible) {
+        final bg = Color.fromARGB(
+          (prefs.backgroundOpacity * 255).round().clamp(0, 255),
+          0,
+          0,
+          0,
+        );
+        await p.setProperty('sub-back-color', _mpvArgbHexFromColor(bg));
+      } else {
+        await p.setProperty('sub-back-color', '#00000000');
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _refreshRateSyncForCurrentState() async {
+    if (!_isWindows) return;
+    final prefs = _playbackPrefs;
+    if (prefs == null) return;
+    if (!prefs.matchDisplayRefreshRate) return;
+    if (prefs.matchDisplayRefreshRateFullscreenOnly && !_isFullscreen) return;
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (!mounted || _player == null) return;
+    try {
+      final platform = _player!.platform;
+      if (platform == null) return;
+      final dynamic pl = platform;
+      final fpsStr = await pl.getProperty('container-fps');
+      final fps = WindowsDisplayRefreshRate.parseFpsString(fpsStr);
+      WindowsDisplayRefreshRate.applyForVideoFps(fps);
+    } catch (_) {}
+  }
+
+  static String _mpvRgbHex(Color c) {
+    int ch(double comp) => (comp * 255.0).round().clamp(0, 255);
+    final r = ch(c.r);
+    final g = ch(c.g);
+    final b = ch(c.b);
+    return '#${r.toRadixString(16).padLeft(2, '0')}'
+        '${g.toRadixString(16).padLeft(2, '0')}'
+        '${b.toRadixString(16).padLeft(2, '0')}';
+  }
+
+  static String _mpvArgbHexFromColor(Color c) {
+    int ch(double comp) => (comp * 255.0).round().clamp(0, 255);
+    final a = ch(c.a);
+    final r = ch(c.r);
+    final g = ch(c.g);
+    final b = ch(c.b);
+    return '#${a.toRadixString(16).padLeft(2, '0')}'
+        '${r.toRadixString(16).padLeft(2, '0')}'
+        '${g.toRadixString(16).padLeft(2, '0')}'
+        '${b.toRadixString(16).padLeft(2, '0')}';
   }
 
   bool get _isWindows => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
@@ -248,11 +583,11 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
     if (event is! PointerScrollEvent) return;
     final delta = event.scrollDelta.dy;
     if (delta == 0) return;
-    final current = _player.state.volume;
+    final current = _player!.state.volume;
     final step = delta > 0 ? -4.0 : 4.0;
     final next = (current + step).clamp(0.0, 100.0);
     try {
-      await _player.setVolume(next);
+      await _player!.setVolume(next);
     } catch (_) {}
     _showVolumeHud(next);
   }
@@ -262,23 +597,36 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
     WidgetsBinding.instance.removeObserver(this);
     _playNextSub?.cancel();
     _playNextSub = null;
+    _tvPlayNextSub?.cancel();
+    _tvPlayNextSub = null;
+    _tvDestroySub?.cancel();
+    _tvDestroySub = null;
+    if (_isAndroidTv) {
+      tv.FlutterTvMedia3.controller.onPlaybackStopping = null;
+      unawaited(_stopTvBridgeOnce());
+    } else {
+      _tvBridge?.stopReporting().then((_) => _tvBridge?.dispose());
+    }
     _volumeSub?.cancel();
     _volumeSub = null;
     _volumeSaveDebounce?.cancel();
     _volumeSaveDebounce = null;
     _controlsHideTimer?.cancel();
     _controlsHideTimer = null;
+    _trackListenSub?.cancel();
+    _trackListenSub = null;
     _engine?.dispose();
-    _reportStoppedIfNeeded();
+    if (!_isAndroidTv) _reportStoppedIfNeeded();
     _subtitlePrefs?.dispose();
     _controlsVisible.dispose();
     _aspectMode.dispose();
-    _player.dispose();
+    _player?.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_isAndroidTv) return;
     if (state == AppLifecycleState.detached || state == AppLifecycleState.paused) {
       _reportStoppedIfNeeded();
     }
@@ -299,7 +647,7 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
         await services.apollo.reportStopped(
           itemId: item.id,
           info: info,
-          positionTicks: _positionTicks(_player.state.position),
+          positionTicks: _positionTicks(_player?.state.position ?? Duration.zero),
         );
       } catch (_) {}
     }();
@@ -327,6 +675,15 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
       return Scaffold(
         appBar: AppBar(title: Text(context.l10n.playback)),
         body: Center(child: Text('$error')),
+      );
+    }
+
+    if (_isAndroidTv) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: _tvNativePlayerOpened
+            ? const ColoredBox(color: Colors.black)
+            : const Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -361,7 +718,7 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
                       builder: (context, mode, _) {
                         final (fit, aspectRatio) = _aspectParams(mode);
                         return Video(
-                          controller: _controller,
+                          controller: _controller!,
                           fit: fit,
                           aspectRatio: aspectRatio,
                           controls: NoVideoControls,
@@ -375,12 +732,13 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
                   if (!_isFullscreen)
                     Positioned.fill(
                       child: _PlayerInputLayer(
-                        player: _player,
+                        player: _player!,
                         onToggleFullscreen: () => _enterFullscreen(item: item, prefs: prefs),
                       ),
                     ),
                   if (_preparing) const Center(child: CircularProgressIndicator()),
-                  _SubtitleOverlay(player: _player, prefs: prefs),
+                  if (_useFlutterSubtitleOverlay)
+                    _SubtitleOverlay(player: _player!, prefs: prefs),
                   Positioned(
                     right: 16,
                     bottom: 132,
@@ -421,7 +779,7 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
                                 right: 0,
                                 bottom: 0,
                                 child: _BottomControlsBar(
-                                  player: _player,
+                                  player: _player!,
                                   engine: _engine,
                                   prefs: prefs,
                                   seekingSeconds: _seekingSeconds,
@@ -439,6 +797,8 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
                                       _enterFullscreen(item: item, prefs: prefs),
                                   isFullscreen: false,
                                   controlsVisible: visible,
+                                  onSubtitlePrefsSynced: () =>
+                                      unawaited(_syncWindowsMpvSubtitleStyle()),
                                 ),
                               ),
                             ],
@@ -457,8 +817,21 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
   }
 
   void _exitToUi({required String itemId}) {
-    final rootNavigator = Navigator.of(context, rootNavigator: true);
     final lastId = AppUiScope.of(context).lastPlaybackItemId.value ?? itemId;
+    // For episodes navigate to the parent series, not the individual episode.
+    final currentItem = _item;
+    final detailsId = (currentItem?.type == 'Episode' && currentItem?.seriesId != null)
+        ? currentItem!.seriesId!
+        : lastId;
+    debugPrint('[BACK] _exitToUi: itemId=$itemId lastId=$lastId detailsId=$detailsId isAndroidTv=$_isAndroidTv');
+
+    if (_isAndroidTv) {
+      debugPrint('[BACK] _exitToUi: navigating to /details/$detailsId');
+      GoRouter.of(context).go('/details/$detailsId');
+      return;
+    }
+
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
     final router = GoRouter.of(rootNavigator.context);
 
     if (_isFullscreen) {
@@ -467,7 +840,7 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
         if (rootNavigator.canPop()) {
           rootNavigator.pop();
         } else {
-          router.go('/details/$lastId');
+          router.go('/details/$detailsId');
         }
       });
       return;
@@ -476,7 +849,7 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
     if (rootNavigator.canPop()) {
       rootNavigator.pop();
     } else {
-      router.go('/details/$lastId');
+      router.go('/details/$detailsId');
     }
   }
 
@@ -514,6 +887,7 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
       await defaultEnterNativeFullscreen();
       nativeEntered = true;
       if (!mounted) return;
+      unawaited(_refreshRateSyncForCurrentState());
       await Navigator.of(context).push(
         PageRouteBuilder<void>(
           opaque: true,
@@ -536,7 +910,7 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
                           builder: (context, mode, _) {
                             final (fit, aspectRatio) = _aspectParams(mode);
                             return Video(
-                              controller: _controller,
+                              controller: _controller!,
                               fit: fit,
                               aspectRatio: aspectRatio,
                               controls: NoVideoControls,
@@ -547,12 +921,13 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
                         ),
                         Positioned.fill(
                           child: _PlayerInputLayer(
-                            player: _player,
+                            player: _player!,
                             onToggleFullscreen: () => Navigator.of(context).pop(),
                           ),
                         ),
                         if (_preparing) const Center(child: CircularProgressIndicator()),
-                        _SubtitleOverlay(player: _player, prefs: prefs),
+                        if (_useFlutterSubtitleOverlay)
+                          _SubtitleOverlay(player: _player!, prefs: prefs),
                         Positioned(
                           right: 16,
                           bottom: 132,
@@ -592,7 +967,7 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
                                       right: 0,
                                       bottom: 0,
                                       child: _BottomControlsBar(
-                                        player: _player,
+                                        player: _player!,
                                         engine: _engine,
                                         prefs: prefs,
                                         seekingSeconds: _seekingSeconds,
@@ -609,6 +984,8 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
                                         onToggleFullscreen: () => Navigator.of(context).pop(),
                                         isFullscreen: true,
                                         controlsVisible: visible,
+                                        onSubtitlePrefsSynced: () =>
+                                            unawaited(_syncWindowsMpvSubtitleStyle()),
                                       ),
                                     ),
                                   ],
@@ -631,6 +1008,7 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
         await defaultExitNativeFullscreen();
       }
       if (mounted) setState(() => _isFullscreen = false);
+      unawaited(_refreshRateSyncForCurrentState());
     }
   }
 
@@ -657,7 +1035,7 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
           onInvoke: (intent) async {
             _markUserActivity();
             try {
-              await _player.playOrPause();
+              await _player!.playOrPause();
             } catch (_) {}
             return null;
           },
@@ -669,13 +1047,13 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
 
   Future<void> _seekBySeconds(int deltaSeconds) async {
     _markUserActivity();
-    final pos = _player.state.position;
-    final duration = _player.state.duration;
+    final pos = _player!.state.position;
+    final duration = _player!.state.duration;
     var target = pos + Duration(seconds: deltaSeconds);
     if (target.isNegative) target = Duration.zero;
     if (duration.inMilliseconds > 0 && target > duration) target = duration;
     try {
-      await _player.seek(target);
+      await _player!.seek(target);
     } catch (_) {}
   }
 
@@ -1192,6 +1570,7 @@ final class _BottomControlsBar extends StatelessWidget {
     required this.onToggleFullscreen,
     required this.isFullscreen,
     required this.controlsVisible,
+    this.onSubtitlePrefsSynced,
   });
 
   final Player player;
@@ -1204,6 +1583,7 @@ final class _BottomControlsBar extends StatelessWidget {
   final VoidCallback onToggleFullscreen;
   final bool isFullscreen;
   final bool controlsVisible;
+  final VoidCallback? onSubtitlePrefsSynced;
 
   @override
   Widget build(BuildContext context) {
@@ -1269,7 +1649,12 @@ final class _BottomControlsBar extends StatelessWidget {
               _ControlIcon(
                 tooltip: context.l10n.subtitles,
                 icon: Icons.closed_caption,
-                onPressed: () => _showSubtitlesDialog(context, player, prefs),
+                onPressed: () => _showSubtitlesDialog(
+                  context,
+                  player,
+                  prefs,
+                  onAppearanceChanged: onSubtitlePrefsSynced,
+                ),
               ),
               const SizedBox(width: 4),
               _ControlIcon(
@@ -1570,11 +1955,9 @@ Future<void> _showAudioPicker(BuildContext context, Player player) async {
 Future<void> _showSubtitlesDialog(
   BuildContext context,
   Player player,
-  ValueNotifier<SubtitlePrefs> prefs,
-) async {
-  const baseFontSize = 75.0;
-  const minFontSizePct = 50.0;
-  const maxFontSizePct = 150.0;
+  ValueNotifier<SubtitlePrefs> prefs, {
+  VoidCallback? onAppearanceChanged,
+}) async {
   await showDialog<void>(
     context: context,
     builder: (context) {
@@ -1666,56 +2049,13 @@ Future<void> _showSubtitlesDialog(
                   child: ValueListenableBuilder<SubtitlePrefs>(
                     valueListenable: prefs,
                     builder: (context, value, _) {
-                      final fontSizePct = ((value.fontSize / baseFontSize) * 100)
-                          .clamp(minFontSizePct, maxFontSizePct);
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(child: Text(context.l10n.fontSize)),
-                              Text(fontSizePct.toStringAsFixed(0)),
-                            ],
-                          ),
-                          Slider(
-                            min: minFontSizePct,
-                            max: maxFontSizePct,
-                            value: fontSizePct,
-                            onChanged: (v) {
-                              final next = value.copyWith(fontSize: baseFontSize * (v / 100));
-                              prefs.value = next;
-                              SubtitlePrefs.save(next);
-                            },
-                          ),
-                          SwitchListTile(
-                            value: value.backgroundVisible,
-                            onChanged: (v) {
-                              final next = value.copyWith(backgroundVisible: v);
-                              prefs.value = next;
-                              SubtitlePrefs.save(next);
-                            },
-                            title: Text(context.l10n.background),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          Row(
-                            children: [
-                              Expanded(child: Text(context.l10n.backgroundOpacity)),
-                              Text('${(value.backgroundOpacity * 100).round()}%'),
-                            ],
-                          ),
-                          Slider(
-                            min: 0.1,
-                            max: 0.9,
-                            value: value.backgroundOpacity.clamp(0.1, 0.9),
-                            onChanged: value.backgroundVisible
-                                ? (v) {
-                                    final next = value.copyWith(backgroundOpacity: v);
-                                    prefs.value = next;
-                                    SubtitlePrefs.save(next);
-                                  }
-                                : null,
-                          ),
-                        ],
+                      return SubtitleAppearanceControls(
+                        value: value,
+                        onChanged: (next) {
+                          prefs.value = next;
+                          SubtitlePrefs.save(next);
+                          onAppearanceChanged?.call();
+                        },
                       );
                     },
                   ),
@@ -1729,6 +2069,7 @@ Future<void> _showSubtitlesDialog(
             onPressed: () async {
               await SubtitlePrefs.reset();
               prefs.value = SubtitlePrefs.defaults;
+              onAppearanceChanged?.call();
             },
             child: Text(context.l10n.reset),
           ),

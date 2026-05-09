@@ -2,16 +2,21 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/app.dart';
 import '../../app/services/app_services.dart';
 import '../../core/emby/models/emby_item.dart';
+import '../../l10n/artemis_error_messages.dart';
 import '../../l10n/l10n.dart';
+import '../../services/artemis/artemis_transport.dart';
 import '../../services/artemis/artemis_service.dart';
 import '../player/playback_prefs.dart';
 import '../widgets/ott_focusable.dart';
 import '../widgets/ott_shimmer.dart';
+import '../widgets/tv_focus_scroll.dart';
+import '../widgets/tv_sidebar_shell.dart' show isTvPlatform;
 import 'playback_page.dart';
 
 final class HomePage extends StatefulWidget {
@@ -77,14 +82,7 @@ final class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   Future<ArtemisRecommendations> _loadTrending(AppServices services) {
-    return services.artemis.getRecommendations().catchError((e, st) {
-      assert(() {
-        debugPrint('[Home] Trending future failed: $e');
-        debugPrint('$st');
-        return true;
-      }());
-      return const ArtemisRecommendations(items: <ArtemisRecommendationItem>[]);
-    });
+    return services.artemis.getRecommendations();
   }
 
   Future<_HomeData> _load(AppServices services) async {
@@ -354,6 +352,7 @@ final class _HomePageState extends State<HomePage> with RouteAware {
                           : _PosterRow(
                               items: latestMovies,
                               onOpenDetails: (id) => context.push('/details/$id'),
+                              onViewAll: () => context.push('/library/movies'),
                             ),
                     ),
                   ),
@@ -369,6 +368,7 @@ final class _HomePageState extends State<HomePage> with RouteAware {
                           : _PosterRow(
                               items: recentMovies,
                               onOpenDetails: (id) => context.push('/details/$id'),
+                              onViewAll: () => context.push('/library/movies'),
                             ),
                     ),
                   ),
@@ -387,14 +387,16 @@ final class _HomePageState extends State<HomePage> with RouteAware {
                             );
                           }
                           if (snap.hasError) {
-                            assert(() {
-                              debugPrint('[Home] Trending Movies error: ${snap.error}');
-                              debugPrint('${snap.stackTrace}');
-                              return true;
-                            }());
+                            final err = snap.error;
+                            if (err != null) {
+                              debugPrint(
+                                '[Home] Trending Movies error: '
+                                '${artemisConnectivityDebugLine(err, snap.stackTrace)}',
+                              );
+                            }
                             return _Section(
                               title: context.l10n.trendingMovies,
-                              child: const _TrendingUnavailable(),
+                              child: _TrendingArtemisError(error: snap.error),
                             );
                           }
                           final items = (snap.data?.items ?? const <ArtemisRecommendationItem>[])
@@ -445,6 +447,7 @@ final class _HomePageState extends State<HomePage> with RouteAware {
                           : _PosterRow(
                               items: latestShows,
                               onOpenDetails: (id) => context.push('/details/$id'),
+                              onViewAll: () => context.push('/library/series'),
                             ),
                     ),
                   ),
@@ -460,6 +463,7 @@ final class _HomePageState extends State<HomePage> with RouteAware {
                           : _PosterRow(
                               items: recentShows,
                               onOpenDetails: (id) => context.push('/details/$id'),
+                              onViewAll: () => context.push('/library/series'),
                             ),
                     ),
                   ),
@@ -479,14 +483,16 @@ final class _HomePageState extends State<HomePage> with RouteAware {
                                 );
                               }
                               if (snap.hasError) {
-                                assert(() {
-                                  debugPrint('[Home] Trending Shows error: ${snap.error}');
-                                  debugPrint('${snap.stackTrace}');
-                                  return true;
-                                }());
+                                final err = snap.error;
+                                if (err != null) {
+                                  debugPrint(
+                                    '[Home] Trending Shows error: '
+                                    '${artemisConnectivityDebugLine(err, snap.stackTrace)}',
+                                  );
+                                }
                                 return _Section(
                                   title: context.l10n.trendingShows,
-                                  child: const _TrendingUnavailable(),
+                                  child: _TrendingArtemisError(error: snap.error),
                                 );
                               }
                               final items =
@@ -754,7 +760,7 @@ final class _Section extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
-              if (onViewAll != null)
+              if (onViewAll != null && !isTvPlatform)
                 TextButton(
                   onPressed: onViewAll,
                   child: Text(context.l10n.viewAll),
@@ -846,6 +852,7 @@ final class _HeroCarouselState extends State<_HeroCarousel> {
   var _page = 0;
   int? _lastPrefetchBase;
   int? _lastPrefetchItemCount;
+  bool _heroFocused = false;
 
   @override
   void initState() {
@@ -934,136 +941,200 @@ final class _HeroCarouselState extends State<_HeroCarousel> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
+  KeyEventResult _handleTvKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final items = widget.items;
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      if (_page > 0) {
+        _goTo(_page - 1);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (_page < items.length - 1) {
+        _goTo(_page + 1);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter) {
+      widget.onOpenDetails(items[_page].id);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  Widget _buildCarouselContent(BuildContext context, bool tv) {
     final services = AppServicesScope.of(context);
     final items = widget.items;
-    if (items.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 22),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: AspectRatio(
-          aspectRatio: 16 / 5,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              PageView.builder(
-                controller: _controller,
-                onPageChanged: (i) {
-                  _page = i;
-                  _prefetchAround(i);
-                },
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final item = items[index];
-                  final imageUri = services.hermes.thumbImageUri(item, maxWidth: 1600);
-                  final logoUri = services.hermes.logoImageUri(item, maxWidth: 900);
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.network(
-                        imageUri.toString(),
-                        fit: BoxFit.cover,
-                        alignment: Alignment.centerRight,
-                        filterQuality: FilterQuality.high,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const ColoredBox(color: Colors.black12),
-                      ),
-                      const IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                              stops: [0.0, 0.55, 1.0],
-                              colors: [
-                                Color(0xF2000000),
-                                Color(0x99000000),
-                                Color(0x00000000),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                              colors: [
-                                Color(0xCC000000),
-                                Color(0x00000000),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned.fill(
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            const leftGutter = 22.0;
-                            const navButtonSpace = 64.0;
-                            const rightGutter = 22.0;
-                            final maxTextWidth = min(760.0, constraints.maxWidth * 0.56);
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 22),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  const SizedBox(width: leftGutter + navButtonSpace),
-                                  ConstrainedBox(
-                                    constraints: BoxConstraints(maxWidth: maxTextWidth),
-                                    child: _HeroTextBlock(
-                                      title: item.name,
-                                      overview: (item.overview ?? '').trim(),
-                                      logoUri: logoUri,
-                                      onPlay: () => widget.onPlay(item),
-                                      onMoreInfo: () => widget.onOpenDetails(item.id),
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  const SizedBox(width: rightGutter + navButtonSpace),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
+    return PageView.builder(
+      controller: _controller,
+      onPageChanged: (i) {
+        _page = i;
+        _prefetchAround(i);
+      },
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final imageUri = services.hermes.thumbImageUri(item, maxWidth: 1600);
+        final logoUri = services.hermes.logoImageUri(item, maxWidth: 900);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(
+              imageUri.toString(),
+              fit: BoxFit.cover,
+              alignment: Alignment.centerRight,
+              filterQuality: FilterQuality.high,
+              errorBuilder: (context, error, stackTrace) =>
+                  const ColoredBox(color: Colors.black12),
+            ),
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    stops: [0.0, 0.55, 1.0],
+                    colors: [
+                      Color(0xF2000000),
+                      Color(0x99000000),
+                      Color(0x00000000),
                     ],
+                  ),
+                ),
+              ),
+            ),
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Color(0xCC000000),
+                      Color(0x00000000),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final leftGutter = tv ? 22.0 : 86.0;
+                  final rightGutter = tv ? 22.0 : 86.0;
+                  final maxTextWidth = min(760.0, constraints.maxWidth * 0.56);
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 22),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        SizedBox(width: leftGutter),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: maxTextWidth),
+                          child: _HeroTextBlock(
+                            title: item.name,
+                            overview: (item.overview ?? '').trim(),
+                            logoUri: logoUri,
+                            onPlay: tv ? null : () => widget.onPlay(item),
+                            onMoreInfo: tv ? null : () => widget.onOpenDetails(item.id),
+                          ),
+                        ),
+                        const Spacer(),
+                        SizedBox(width: rightGutter),
+                      ],
+                    ),
                   );
                 },
               ),
-              Positioned(
-                left: 12,
-                top: 0,
-                bottom: 0,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: _HeroNavButton(
-                    icon: Icons.chevron_left,
-                    onPressed: () => _goTo((_page - 1) < 0 ? items.length - 1 : _page - 1),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.items;
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    final tv = isTvPlatform;
+    final scheme = Theme.of(context).colorScheme;
+
+    Widget carousel = ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: AspectRatio(
+        aspectRatio: 16 / 5,
+        child: tv
+            ? _buildCarouselContent(context, true)
+            : Stack(
+                fit: StackFit.expand,
+                children: [
+                  _buildCarouselContent(context, false),
+                  Positioned(
+                    left: 12,
+                    top: 0,
+                    bottom: 0,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _HeroNavButton(
+                        icon: Icons.chevron_left,
+                        onPressed: () =>
+                            _goTo((_page - 1) < 0 ? items.length - 1 : _page - 1),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              Positioned(
-                right: 12,
-                top: 0,
-                bottom: 0,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: _HeroNavButton(
-                    icon: Icons.chevron_right,
-                    onPressed: () => _goTo(_page + 1),
+                  Positioned(
+                    right: 12,
+                    top: 0,
+                    bottom: 0,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: _HeroNavButton(
+                        icon: Icons.chevron_right,
+                        onPressed: () => _goTo(_page + 1),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
-        ),
       ),
+    );
+
+    if (tv) {
+      carousel = Focus(
+        onFocusChange: (f) => setState(() => _heroFocused = f),
+        onKeyEvent: _handleTvKeyEvent,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: _heroFocused ? scheme.primary : Colors.transparent,
+              width: 3,
+            ),
+            boxShadow: _heroFocused
+                ? [
+                    BoxShadow(
+                      color: scheme.primary.withValues(alpha: 0.35),
+                      blurRadius: 24,
+                      spreadRadius: 2,
+                    ),
+                  ]
+                : const [],
+          ),
+          child: carousel,
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 22),
+      child: carousel,
     );
   }
 }
@@ -1100,15 +1171,15 @@ final class _HeroTextBlock extends StatelessWidget {
     required this.title,
     required this.overview,
     required this.logoUri,
-    required this.onPlay,
-    required this.onMoreInfo,
+    this.onPlay,
+    this.onMoreInfo,
   });
 
   final String title;
   final String overview;
   final Uri? logoUri;
-  final VoidCallback onPlay;
-  final VoidCallback onMoreInfo;
+  final VoidCallback? onPlay;
+  final VoidCallback? onMoreInfo;
 
   @override
   Widget build(BuildContext context) {
@@ -1173,23 +1244,27 @@ final class _HeroTextBlock extends StatelessWidget {
                 ),
           ),
         ],
-        const SizedBox(height: 16),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FilledButton.icon(
-              onPressed: onPlay,
-              icon: const Icon(Icons.play_arrow),
-              label: Text(context.l10n.play),
-            ),
-            const SizedBox(width: 12),
-            OutlinedButton.icon(
-              onPressed: onMoreInfo,
-              icon: const Icon(Icons.info_outline),
-              label: Text(context.l10n.moreInfo),
-            ),
-          ],
-        ),
+        if (onPlay != null || onMoreInfo != null) ...[
+          const SizedBox(height: 16),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (onPlay != null)
+                FilledButton.icon(
+                  onPressed: onPlay,
+                  icon: const Icon(Icons.play_arrow),
+                  label: Text(context.l10n.play),
+                ),
+              if (onPlay != null && onMoreInfo != null) const SizedBox(width: 12),
+              if (onMoreInfo != null)
+                OutlinedButton.icon(
+                  onPressed: onMoreInfo,
+                  icon: const Icon(Icons.info_outline),
+                  label: Text(context.l10n.moreInfo),
+                ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -1199,21 +1274,33 @@ final class _PosterRow extends StatelessWidget {
   const _PosterRow({
     required this.items,
     required this.onOpenDetails,
+    this.onViewAll,
   });
 
   final List<EmbyItem> items;
   final ValueChanged<String> onOpenDetails;
+  final VoidCallback? onViewAll;
 
   @override
   Widget build(BuildContext context) {
     final services = AppServicesScope.of(context);
+    final tv = isTvPlatform;
+    final dataCount = min(30, items.length);
+    final showViewAllCard = tv && onViewAll != null;
 
     return FocusTraversalGroup(
       policy: ReadingOrderTraversalPolicy(),
       child: _HorizontalRowList(
         height: 240,
-        itemCount: min(30, items.length),
+        itemCount: dataCount + (showViewAllCard ? 1 : 0),
         itemBuilder: (context, index) {
+          if (index >= dataCount) {
+            return _ViewAllCard(
+              height: 240,
+              width: 160,
+              onPressed: onViewAll!,
+            );
+          }
           final item = items[index];
           return _PosterCard(
             item: item,
@@ -1268,6 +1355,33 @@ final class _TrendingUnavailable extends StatelessWidget {
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.70),
               ),
+        ),
+      ),
+    );
+  }
+}
+
+final class _TrendingArtemisError extends StatelessWidget {
+  const _TrendingArtemisError({this.error});
+
+  final Object? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = messageForArtemisError(context.l10n, error);
+    return SizedBox(
+      height: 240,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            text,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: scheme.error.withValues(alpha: 0.92),
+                ),
+          ),
         ),
       ),
     );
@@ -1834,23 +1948,25 @@ final class _ContinueWatchingCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Material(
-                  color: Colors.transparent,
-                  child: InkResponse(
-                    onTap: onPlay,
-                    radius: 24,
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+                if (!isTvPlatform) ...[
+                  const SizedBox(width: 10),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkResponse(
+                      onTap: onPlay,
+                      radius: 24,
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+                        ),
+                        child: const Icon(Icons.play_arrow, size: 18),
                       ),
-                      child: const Icon(Icons.play_arrow, size: 18),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -1939,6 +2055,50 @@ final class _PosterCard extends StatelessWidget {
   }
 }
 
+final class _ViewAllCard extends StatelessWidget {
+  const _ViewAllCard({
+    required this.height,
+    required this.width,
+    required this.onPressed,
+  });
+
+  final double height;
+  final double width;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: OttFocusableCard(
+        onPressed: onPressed,
+        borderRadius: 16,
+        child: Container(
+          color: Colors.white.withValues(alpha: 0.08),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.arrow_forward_rounded,
+                size: 36,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                context.l10n.viewAll,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 double _progressFactor(EmbyItem item) {
   final pos = (item.playbackPositionTicks ?? 0).clamp(0, 1 << 62);
   if (pos <= 0) return 0;
@@ -1970,6 +2130,7 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
   final _controller = ScrollController();
   bool _canScrollLeft = false;
   bool _canScrollRight = false;
+  bool _tvRowHasFocus = false;
 
   @override
   void initState() {
@@ -1983,6 +2144,13 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
     _controller.removeListener(_updateNav);
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onTvRowFocusChange(bool hasFocus) {
+    if (hasFocus && !_tvRowHasFocus && _controller.hasClients) {
+      _controller.jumpTo(0);
+    }
+    _tvRowHasFocus = hasFocus;
   }
 
   void _updateNav() {
@@ -2016,7 +2184,8 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
         ? _controller.position.viewportDimension
         : MediaQuery.sizeOf(context).width;
     final jump = viewportWidth * 0.85;
-    return SizedBox(
+    final tv = isTvPlatform;
+    Widget result = SizedBox(
       height: widget.height + 28,
       child: Stack(
         fit: StackFit.expand,
@@ -2027,10 +2196,16 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
             itemCount: widget.itemCount,
             padding: const EdgeInsets.symmetric(vertical: 14),
             clipBehavior: Clip.none,
+            cacheExtent: tv ? 1500 : null,
             separatorBuilder: (context, index) => const SizedBox(width: 12),
-            itemBuilder: widget.itemBuilder,
+            itemBuilder: tv
+                ? (context, index) => TvFocusScrollItem(
+                      scrollController: _controller,
+                      child: widget.itemBuilder(context, index),
+                    )
+                : widget.itemBuilder,
           ),
-          if (_canScrollLeft)
+          if (!tv && _canScrollLeft)
             Positioned(
               left: 8,
               top: 0,
@@ -2043,7 +2218,7 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
                 ),
               ),
             ),
-          if (_canScrollRight)
+          if (!tv && _canScrollRight)
             Positioned(
               right: 8,
               top: 0,
@@ -2059,6 +2234,14 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
         ],
       ),
     );
+    if (tv) {
+      result = Focus(
+        skipTraversal: true,
+        onFocusChange: _onTvRowFocusChange,
+        child: result,
+      );
+    }
+    return result;
   }
 }
 

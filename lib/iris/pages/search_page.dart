@@ -7,10 +7,14 @@ import 'package:go_router/go_router.dart';
 import '../../app/app.dart';
 import '../../app/services/app_services.dart';
 import '../../core/emby/models/emby_item.dart';
+import '../../l10n/artemis_error_messages.dart';
 import '../../l10n/l10n.dart';
 import '../../services/artemis/artemis_service.dart';
 import '../widgets/ott_focusable.dart';
 import '../widgets/ott_shimmer.dart';
+import '../widgets/tv_focus_scroll.dart';
+import '../widgets/tv_keyboard.dart';
+import '../widgets/tv_sidebar_shell.dart' show isTvPlatform;
  
 final class SearchPage extends StatefulWidget {
   const SearchPage({super.key, required this.initialQuery});
@@ -88,16 +92,23 @@ final class _SearchPageState extends State<SearchPage> with RouteAware {
   Future<_SearchResults> _search(String query) async {
     final services = _services!;
     final libraryFuture = services.hermes.search(query: query, limit: 60);
-    final requestableFuture = services.artemis.search(query: query, limit: 40).catchError((_) {
-      return const <ArtemisRecommendationItem>[];
-    });
-    final res = await Future.wait<Object>([
-      libraryFuture,
-      requestableFuture,
-    ]);
+    final artemisFuture = services.artemis.search(query: query, limit: 40);
+
+    Object? artemisError;
+    List<ArtemisRecommendationItem> requestable = const [];
+    try {
+      requestable = await artemisFuture;
+    } catch (e, st) {
+      debugPrint('[Search] Artemis search failed: $e');
+      debugPrint('$st');
+      artemisError = e;
+    }
+
+    final library = await libraryFuture;
     return _SearchResults(
-      library: res[0] as List<EmbyItem>,
-      requestable: res[1] as List<ArtemisRecommendationItem>,
+      library: library,
+      requestable: requestable,
+      artemisError: artemisError,
     );
   }
  
@@ -133,17 +144,28 @@ final class _SearchPageState extends State<SearchPage> with RouteAware {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(22, 12, 22, 10),
-                    child: _SearchHeader(
-                      controller: _controller,
-                      onClear: () {
-                        _controller.text = '';
-                        _controller.selection = const TextSelection.collapsed(offset: 0);
-                      },
-                      onSubmitted: (value) {
-                        final q = value.trim();
-                        setState(() => _future = q.isEmpty ? null : _search(q));
-                      },
-                    ),
+                    child: isTvPlatform
+                        ? _TvSearchHeader(
+                            query: _query,
+                            onQueryChanged: (q) {
+                              _controller.text = q;
+                              _controller.selection =
+                                  TextSelection.collapsed(offset: q.length);
+                            },
+                          )
+                        : _SearchHeader(
+                            controller: _controller,
+                            onClear: () {
+                              _controller.text = '';
+                              _controller.selection =
+                                  const TextSelection.collapsed(offset: 0);
+                            },
+                            onSubmitted: (value) {
+                              final q = value.trim();
+                              setState(() =>
+                                  _future = q.isEmpty ? null : _search(q));
+                            },
+                          ),
                   ),
                 ),
                 if (_future == null)
@@ -179,7 +201,13 @@ final class _SearchPageState extends State<SearchPage> with RouteAware {
                           final library = data?.library ?? const <EmbyItem>[];
                           final requestable =
                               data?.requestable ?? const <ArtemisRecommendationItem>[];
+                          final artemisError = data?.artemisError;
                           if (library.isEmpty && requestable.isEmpty) {
+                            if (artemisError != null) {
+                              return _ArtemisSearchUnavailable(
+                                message: messageForArtemisError(l10n, artemisError),
+                              );
+                            }
                             return _SearchNoResults(query: _query);
                           }
 
@@ -197,6 +225,16 @@ final class _SearchPageState extends State<SearchPage> with RouteAware {
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  if (artemisError != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 16),
+                                      child: Text(
+                                        messageForArtemisError(l10n, artemisError),
+                                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                              color: scheme.error.withValues(alpha: 0.92),
+                                            ),
+                                      ),
+                                    ),
                                   if (library.isNotEmpty) ...[
                                     _SectionHeader(
                                       title: l10n.availableSectionTitle,
@@ -314,10 +352,35 @@ final class _SearchResults {
   const _SearchResults({
     required this.library,
     required this.requestable,
+    this.artemisError,
   });
 
   final List<EmbyItem> library;
   final List<ArtemisRecommendationItem> requestable;
+  final Object? artemisError;
+}
+
+final class _ArtemisSearchUnavailable extends StatelessWidget {
+  const _ArtemisSearchUnavailable({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 10, 22, 22),
+      child: Center(
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: scheme.error.withValues(alpha: 0.92),
+              ),
+        ),
+      ),
+    );
+  }
 }
 
 final class _SearchResultCard extends StatelessWidget {
@@ -534,7 +597,7 @@ final class _SearchHeader extends StatelessWidget {
             Expanded(
               child: TextField(
                 controller: controller,
-                autofocus: true,
+                autofocus: !isTvPlatform,
                 decoration: InputDecoration(
                   hintText: l10n.searchHint,
                   border: InputBorder.none,
@@ -554,6 +617,108 @@ final class _SearchHeader extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+final class _TvSearchHeader extends StatefulWidget {
+  const _TvSearchHeader({
+    required this.query,
+    required this.onQueryChanged,
+  });
+
+  final String query;
+  final ValueChanged<String> onQueryChanged;
+
+  @override
+  State<_TvSearchHeader> createState() => _TvSearchHeaderState();
+}
+
+final class _TvSearchHeaderState extends State<_TvSearchHeader> {
+  late String _text;
+
+  @override
+  void initState() {
+    super.initState();
+    _text = widget.query;
+  }
+
+  @override
+  void didUpdateWidget(covariant _TvSearchHeader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.query != widget.query) _text = widget.query;
+  }
+
+  void _addChar(String c) {
+    setState(() => _text += c);
+    widget.onQueryChanged(_text);
+  }
+
+  void _backspace() {
+    if (_text.isEmpty) return;
+    setState(() => _text = _text.substring(0, _text.length - 1));
+    widget.onQueryChanged(_text);
+  }
+
+  void _clear() {
+    setState(() => _text = '');
+    widget.onQueryChanged(_text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.search, color: scheme.onSurface.withValues(alpha: 0.5), size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _text.isEmpty ? l10n.searchHint : _text,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: _text.isEmpty
+                              ? scheme.onSurface.withValues(alpha: 0.4)
+                              : scheme.onSurface,
+                        ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (_text.isNotEmpty)
+                  Text(
+                    '|',
+                    style: TextStyle(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w300,
+                      fontSize: 18,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TvKeyboard(
+          autofocusFirstKey: true,
+          onChar: _addChar,
+          onBackspace: _backspace,
+          onClear: _clear,
+        ),
+      ],
     );
   }
 }
@@ -632,7 +797,7 @@ final class _Badge extends StatelessWidget {
   }
 }
 
-final class _SearchRail extends StatelessWidget {
+final class _SearchRail extends StatefulWidget {
   const _SearchRail({
     required this.itemCount,
     required this.itemBuilder,
@@ -642,16 +807,37 @@ final class _SearchRail extends StatelessWidget {
   final IndexedWidgetBuilder itemBuilder;
 
   @override
+  State<_SearchRail> createState() => _SearchRailState();
+}
+
+final class _SearchRailState extends State<_SearchRail> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (itemCount <= 0) return const SizedBox.shrink();
+    if (widget.itemCount <= 0) return const SizedBox.shrink();
+    final tv = isTvPlatform;
     return SizedBox(
       height: 240,
       child: ListView.separated(
+        controller: _controller,
         scrollDirection: Axis.horizontal,
-        itemCount: itemCount,
+        itemCount: widget.itemCount,
         clipBehavior: Clip.none,
+        cacheExtent: tv ? 1500 : null,
         separatorBuilder: (context, index) => const SizedBox(width: 14),
-        itemBuilder: itemBuilder,
+        itemBuilder: tv
+            ? (context, index) => TvFocusScrollItem(
+                  scrollController: _controller,
+                  child: widget.itemBuilder(context, index),
+                )
+            : widget.itemBuilder,
       ),
     );
   }

@@ -65,7 +65,10 @@ final class _LoginPageState extends State<LoginPage> {
           username: _usernameController.text.trim(),
           password: _passwordController.text,
         );
-      } catch (_) {}
+      } catch (e, st) {
+        debugPrint('[Login] Artemis syncWithJanus failed: $e');
+        debugPrint('$st');
+      }
 
       if (!mounted) return;
       AppUiScope.of(context).isAuthenticated.value = true;

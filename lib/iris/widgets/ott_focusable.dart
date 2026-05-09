@@ -36,12 +36,21 @@ final class _OttFocusableCardState extends State<OttFocusableCard> {
     final border = scheme.primary.withValues(alpha: borderAlpha);
     final active = _focused || _hovered;
 
-    return FocusableActionDetector(
-      onShowFocusHighlight: (value) => setState(() => _focused = value),
-      onShowHoverHighlight: (value) => setState(() => _hovered = value),
-      mouseCursor:
-          widget.onPressed == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
-      child: AnimatedScale(
+    return Actions(
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) {
+            widget.onPressed?.call();
+            return null;
+          },
+        ),
+      },
+      child: FocusableActionDetector(
+        onShowFocusHighlight: (value) => setState(() => _focused = value),
+        onShowHoverHighlight: (value) => setState(() => _hovered = value),
+        mouseCursor:
+            widget.onPressed == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
+        child: AnimatedScale(
         scale: _focused
             ? widget.focusScale
             : _hovered
@@ -80,6 +89,7 @@ final class _OttFocusableCardState extends State<OttFocusableCard> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

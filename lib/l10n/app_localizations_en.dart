@@ -92,6 +92,65 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trendingUnavailable => 'Trending unavailable';
 
   @override
+  String get artemisConnectionFailed =>
+      'Can\'t reach *seerr. Check URL and API key, and that this device is online.';
+
+  @override
+  String get artemisConnectionFailedCertificate =>
+      'Can\'t reach *seerr: HTTPS or certificate problem. Check the URL, server certificate chain, and that the *seerr base URL is correct (not the Emby URL).';
+
+  @override
+  String get artemisConnectionFailedDns =>
+      'Can\'t reach *seerr: could not resolve the server name. Check Wi‑Fi DNS (try disabling Private DNS) or the URL you entered.';
+
+  @override
+  String get artemisConnectionFailedNetwork =>
+      'Can\'t reach *seerr: network error (timeout, refused, or unreachable). Check the TV is online, the server is up, and IPv6/DNS for your domain.';
+
+  @override
+  String get artemisWrongServerNotJellyseerr =>
+      'This URL is not your *seerr server (e.g. it points to Emby). Use your Jellyseerr base URL — often a separate subdomain such as https://request.example.com — not your Emby URL.';
+
+  @override
+  String get artemisDiagnosticsTitle => '*seerr connection diagnostics';
+
+  @override
+  String get artemisDiagnosticsOpen => 'Connection diagnostics';
+
+  @override
+  String get artemisDiagnosticsTest => 'Test connection';
+
+  @override
+  String get artemisDiagnosticsSeerrUrl => 'Saved *seerr URL';
+
+  @override
+  String get artemisDiagnosticsResult => 'Result';
+
+  @override
+  String get artemisDiagnosticsDebugLine => 'Technical detail (for support)';
+
+  @override
+  String get artemisDiagnosticsCopy => 'Copy details';
+
+  @override
+  String get artemisDiagnosticsCopyDone => 'Copied to clipboard';
+
+  @override
+  String get artemisDiagnosticsNotConfigured =>
+      'Setup is incomplete: save your *seerr URL and API key in setup first.';
+
+  @override
+  String get artemisDiagnosticsInfraTips =>
+      'If only this device fails:\n• Server: full TLS chain, correct SNI, TLS 1.2+; avoid broken TLS renegotiation.\n• DNS: check A and AAAA for your *seerr host; fix or remove a bad IPv6 (AAAA) record.\n• Android TV: try disabling Private DNS; check Pi-hole / router DNS.\n• Reverse proxy: this hostname must forward to Jellyseerr, not Emby.';
+
+  @override
+  String get artemisDiagnosticsReachableYes =>
+      'Reachable — Jellyseerr responded as expected.';
+
+  @override
+  String get artemisDiagnosticsReachableNo => 'Not reachable';
+
+  @override
   String get save => 'Save';
 
   @override
@@ -372,4 +431,43 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchFailed => 'Search failed';
+
+  @override
+  String get exitApp => 'Exit App';
+
+  @override
+  String get exitAppConfirm => 'Are you sure you want to exit?';
+
+  @override
+  String get exit => 'Exit';
+
+  @override
+  String get playerSettings => 'Player / MPV…';
+
+  @override
+  String get playerSettingsMpvTitle => 'Player (mpv)';
+
+  @override
+  String get playerSettingsMatchRefreshRate =>
+      'Match display refresh rate to video';
+
+  @override
+  String get playerSettingsMatchRefreshRateHelp =>
+      'Primary display only. May flicker; multi‑monitor and HDR can behave oddly. Off by default.';
+
+  @override
+  String get playerSettingsMatchRefreshRateFullscreenOnly =>
+      'Only while fullscreen';
+
+  @override
+  String playerSettingsMpvPathFull(Object path) {
+    return 'mpv.conf:\n$path';
+  }
+
+  @override
+  String get playerSettingsMpvHelp =>
+      'Loaded after built‑in defaults so options here override them. mpv manual: https://mpv.io/manual/master/';
+
+  @override
+  String get playerSettingsOpenConfigFolder => 'Open config folder';
 }

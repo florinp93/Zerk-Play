@@ -92,6 +92,65 @@ class AppLocalizationsRo extends AppLocalizations {
   String get trendingUnavailable => 'Tendințe indisponibile';
 
   @override
+  String get artemisConnectionFailed =>
+      'Nu pot accesa *seerr. Verifică URL-ul, cheia API și conexiunea la internet.';
+
+  @override
+  String get artemisConnectionFailedCertificate =>
+      'Nu pot accesa *seerr: problemă HTTPS sau certificat. Verifică URL-ul, lanțul de certificate și că folosești adresa de bază *seerr (nu cea Emby).';
+
+  @override
+  String get artemisConnectionFailedDns =>
+      'Nu pot accesa *seerr: nu pot rezolva numele serverului. Verifică DNS-ul Wi‑Fi (încearcă să dezactivezi DNS privat) sau URL-ul introdus.';
+
+  @override
+  String get artemisConnectionFailedNetwork =>
+      'Nu pot accesa *seerr: eroare de rețea (timeout, refuz sau indisponibil). Verifică că TV-ul e online, serverul rulează și DNS/IPv6 pentru domeniu.';
+
+  @override
+  String get artemisWrongServerNotJellyseerr =>
+      'Acest URL nu este serverul *seerr (de exemplu indică Emby). Folosește adresa de bază Jellyseerr — adesea un subdomeniu separat, ex. https://request.example.com — nu URL-ul Emby.';
+
+  @override
+  String get artemisDiagnosticsTitle => 'Diagnostic conexiune *seerr';
+
+  @override
+  String get artemisDiagnosticsOpen => 'Diagnostic conexiune';
+
+  @override
+  String get artemisDiagnosticsTest => 'Testează conexiunea';
+
+  @override
+  String get artemisDiagnosticsSeerrUrl => 'URL *seerr salvat';
+
+  @override
+  String get artemisDiagnosticsResult => 'Rezultat';
+
+  @override
+  String get artemisDiagnosticsDebugLine => 'Detaliu tehnic (pentru suport)';
+
+  @override
+  String get artemisDiagnosticsCopy => 'Copiază detaliile';
+
+  @override
+  String get artemisDiagnosticsCopyDone => 'Copiat în clipboard';
+
+  @override
+  String get artemisDiagnosticsNotConfigured =>
+      'Configurare incompletă: salvează mai întâi URL-ul și cheia API *seerr.';
+
+  @override
+  String get artemisDiagnosticsInfraTips =>
+      'Dacă doar acest dispozitiv eșuează:\n• Server: lanț TLS complet, SNI corect, TLS 1.2+; evită renegocierea TLS defectă.\n• DNS: verifică A și AAAA pentru hostul *seerr; corectează sau șterge AAAA invalid.\n• Android TV: încearcă fără DNS privat; verifică Pi-hole / DNS router.\n• Reverse proxy: hostul trebuie să ducă la Jellyseerr, nu Emby.';
+
+  @override
+  String get artemisDiagnosticsReachableYes =>
+      'Accesibil — Jellyseerr răspunde corect.';
+
+  @override
+  String get artemisDiagnosticsReachableNo => 'Neaccesibil';
+
+  @override
   String get save => 'Salvează';
 
   @override
@@ -372,4 +431,44 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get searchFailed => 'Căutarea a eșuat';
+
+  @override
+  String get exitApp => 'Închide aplicația';
+
+  @override
+  String get exitAppConfirm => 'Ești sigur că vrei să închizi aplicația?';
+
+  @override
+  String get exit => 'Închide';
+
+  @override
+  String get playerSettings => 'Player / MPV…';
+
+  @override
+  String get playerSettingsMpvTitle => 'Player (mpv)';
+
+  @override
+  String get playerSettingsMatchRefreshRate =>
+      'Potrivește refresh‑ul display‑ului cu videoclipul';
+
+  @override
+  String get playerSettingsMatchRefreshRateHelp =>
+      'Doar display principal. Poate clipi; multi‑monitor și HDR pot avea probleme. Implicit oprit.';
+
+  @override
+  String get playerSettingsMatchRefreshRateFullscreenOnly =>
+      'Doar pe ecran complet';
+
+  @override
+  String playerSettingsMpvPathFull(Object path) {
+    return 'mpv.conf:\n$path';
+  }
+
+  @override
+  String get playerSettingsMpvHelp =>
+      'Încărcat după valorile implicite aplicației, deci opțiunile de aici le pot suprascrie. Manual mpv: https://mpv.io/manual/master/';
+
+  @override
+  String get playerSettingsOpenConfigFolder =>
+      'Deschide folderul de configurare';
 }

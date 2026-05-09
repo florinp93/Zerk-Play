@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -6,6 +7,8 @@ import '../services/artemis/artemis_service.dart';
 import '../iris/pages/home_page.dart';
 import '../iris/pages/login_page.dart';
 import '../iris/pages/setup_page.dart';
+import '../iris/pages/tv_pairing_page.dart';
+import '../iris/pages/collection_detail_page.dart';
 import '../iris/pages/details_page.dart';
 import '../iris/pages/collections_page.dart';
 import '../iris/pages/library_page.dart';
@@ -15,6 +18,7 @@ import '../iris/pages/search_page.dart';
 import '../iris/settings/app_prefs.dart';
 import '../iris/theme/ott_theme.dart';
 import '../iris/widgets/app_shell.dart';
+import '../iris/widgets/tv_sidebar_shell.dart' show isTvPlatform;
 import '../l10n/app_localizations.dart';
 import '../l10n/l10n.dart';
 import 'updater_wrapper.dart';
@@ -60,17 +64,30 @@ final class _AppState extends State<App> {
       refreshListenable: Listenable.merge([_isAuthenticated, _isConfigured]),
       redirect: (context, state) {
         final configured = _isConfigured.value;
-        final atSetup = state.matchedLocation == '/setup';
+        final authed = _isAuthenticated.value;
+        final loc = state.matchedLocation;
+
+        if (isTvPlatform) {
+          final atPair = loc == '/pair';
+          if (!configured || !authed) return atPair ? null : '/pair';
+          if (atPair) return '/';
+          return null;
+        }
+
+        final atSetup = loc == '/setup';
         if (!configured) return atSetup ? null : '/setup';
 
-        final authed = _isAuthenticated.value;
-        final atLogin = state.matchedLocation == '/login';
+        final atLogin = loc == '/login';
         if (!authed) return atLogin ? null : '/login';
         if (authed && atLogin) return '/';
         if (configured && atSetup) return authed ? '/' : '/login';
         return null;
       },
       routes: [
+        GoRoute(
+          path: '/pair',
+          builder: (context, state) => const TvPairingPage(),
+        ),
         GoRoute(
           path: '/setup',
           builder: (context, state) => const SetupPage(),
@@ -119,6 +136,12 @@ final class _AppState extends State<App> {
             GoRoute(
               path: '/collections',
               builder: (context, state) => const CollectionsPage(),
+            ),
+            GoRoute(
+              path: '/collection/:id',
+              builder: (context, state) => CollectionDetailPage(
+                collectionId: state.pathParameters['id']!,
+              ),
             ),
             GoRoute(
               path: '/request/:type/:id',
@@ -177,6 +200,7 @@ final class _AppState extends State<App> {
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               title: 'Zerk Play',
               theme: ottDarkTheme(),
+              scrollBehavior: _SmoothScrollBehavior(),
               routerConfig: _router,
               builder: (context, child) {
                 if (child == null) return const SizedBox.shrink();
@@ -245,4 +269,21 @@ final class AppUiScope extends InheritedWidget {
         oldWidget.locale != locale ||
         oldWidget.showFeedbackButton != showFeedbackButton;
   }
+}
+
+/// Enables smooth scrolling across all device kinds (mouse, trackpad, touch).
+/// On desktop this makes mouse-drag scroll work and uses physics that feel
+/// natural on high-refresh-rate displays.
+final class _SmoothScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+      };
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) =>
+      const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
 }

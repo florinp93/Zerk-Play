@@ -124,6 +124,25 @@ final class HermesService {
     return _parseItems(json);
   }
 
+  Future<List<EmbyItem>> getCollectionItems(String collectionId,
+      {int limit = 200}) async {
+    final session = _janus.session;
+    final json = await _janus.client.getJson(
+      '/Users/${session.userId}/Items',
+      queryParameters: {
+        'ParentId': collectionId,
+        'Recursive': 'true',
+        'IncludeItemTypes': 'Movie,Series',
+        'SortBy': 'PremiereDate,ProductionYear,SortName',
+        'SortOrder': 'Ascending,Ascending,Ascending',
+        'Limit': '$limit',
+        'Fields':
+            'Overview,ProductionYear,Genres,ImageTags,UserData,RunTimeTicks',
+      },
+    );
+    return _parseItems(json);
+  }
+
   Future<List<EmbyItem>> getCollectionMovies(String collectionId, {int limit = 60}) async {
     final session = _janus.session;
     final json = await _janus.client.getJson(
@@ -145,6 +164,8 @@ final class HermesService {
     required List<String> includeItemTypes,
     int startIndex = 0,
     int limit = 60,
+    String sortBy = 'SortName',
+    String sortOrder = 'Ascending',
   }) async {
     final session = _janus.session;
     final json = await _janus.client.getJson(
@@ -152,8 +173,8 @@ final class HermesService {
       queryParameters: {
         'Recursive': 'true',
         'IncludeItemTypes': includeItemTypes.join(','),
-        'SortBy': 'SortName',
-        'SortOrder': 'Ascending',
+        'SortBy': sortBy,
+        'SortOrder': sortOrder,
         'StartIndex': '$startIndex',
         'Limit': '$limit',
         'Fields': 'Overview,ProductionYear,Genres,ImageTags,UserData,SeriesId,SeasonId,ParentId',
@@ -210,7 +231,7 @@ final class HermesService {
     final json = await _janus.client.getJson(
       '/Users/${session.userId}/Items/$itemId',
       queryParameters: {
-        'Fields': 'Overview,ProductionYear,Genres,CommunityRating,ImageTags,UserData,Chapters',
+        'Fields': 'Overview,ProductionYear,Genres,CommunityRating,ImageTags,UserData,Chapters,SeriesId,SeasonId,ParentId,RunTimeTicks',
       },
     );
     return EmbyItem.fromJson(json);

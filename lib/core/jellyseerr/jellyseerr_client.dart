@@ -71,6 +71,15 @@ final class JellyseerrClient {
     return _decodeJsonResponse(uri: uri, response: response);
   }
 
+  /// Raw GET for reachability probes (inspect status, headers, body shape).
+  Future<http.Response> rawGet(
+    String path, {
+    Map<String, String?> queryParameters = const {},
+  }) async {
+    final uri = buildUri(path, queryParameters: queryParameters);
+    return _http.get(uri, headers: _headers());
+  }
+
   Future<Map<String, dynamic>> postJson(
     String path, {
     Map<String, String?> queryParameters = const {},
@@ -115,10 +124,8 @@ final class JellyseerrClient {
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (decodedBody is Map<String, dynamic>) return decodedBody;
-      if (kDebugMode) {
-        debugPrint('[Jellyseerr] Non-JSON body for ${response.statusCode} ${uri.toString()}');
-        debugPrint('[Jellyseerr] body: $decodedBody');
-      }
+      debugPrint('[Jellyseerr] Non-JSON body for ${response.statusCode} ${uri.toString()}');
+      debugPrint('[Jellyseerr] body: $decodedBody');
       throw JellyseerrApiException(
         statusCode: response.statusCode,
         reasonPhrase: response.reasonPhrase,
@@ -127,10 +134,8 @@ final class JellyseerrClient {
       );
     }
 
-    if (kDebugMode) {
-      debugPrint('[Jellyseerr] HTTP ${response.statusCode} ${uri.toString()}');
-      debugPrint('[Jellyseerr] body: $decodedBody');
-    }
+    debugPrint('[Jellyseerr] HTTP ${response.statusCode} ${uri.toString()}');
+    debugPrint('[Jellyseerr] body: $decodedBody');
     throw JellyseerrApiException(
       statusCode: response.statusCode,
       reasonPhrase: response.reasonPhrase,

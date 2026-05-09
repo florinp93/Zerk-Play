@@ -1,8 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 import '../../core/jellyseerr/jellyseerr_api_exception.dart';
 import '../../core/jellyseerr/jellyseerr_client.dart';
 import '../../core/storage/local_store.dart';
+import 'artemis_transport.dart';
 import '../janus/janus_service.dart';
 
 enum MediaType { movie, tv }
@@ -84,25 +88,154 @@ final class ArtemisService {
   ArtemisService({
     required LocalStore store,
     required String apiKey,
+    required http.Client httpClient,
     Uri? baseUrl,
   })  : _store = store,
         _apiKey = apiKey,
-        _client = JellyseerrClient(baseUrl: baseUrl, apiKey: apiKey);
+        _httpClient = httpClient,
+        _client = JellyseerrClient(
+          baseUrl: baseUrl,
+          apiKey: apiKey,
+          httpClient: httpClient,
+        );
 
   static const _kCookie = 'jellyseerr.cookie';
 
   final LocalStore _store;
+  final http.Client _httpClient;
   String _apiKey;
   JellyseerrClient _client;
 
   Future<void> init() async {
     final cookie = await _store.getString(_kCookie);
     _client.setSessionCookie(cookie);
-    if (kDebugMode) {
-      debugPrint('[Artemis] init: cookiePresent=${(cookie ?? '').isNotEmpty}');
-      debugPrint('[Artemis] init: apiKeyPresent=${_apiKey.trim().isNotEmpty}');
-    }
+    debugPrint('[Artemis] init: baseUrl=${_client.baseUrl}, cookiePresent=${(cookie ?? '').isNotEmpty}, apiKeyPresent=${_apiKey.trim().isNotEmpty}');
+    _checkConnectivity();
   }
+
+  Future<void> _checkConnectivity() async {
+    await checkReachability();
+  }
+
+  /// Same check as [isReachable], but returns structured diagnostics for UI and `adb logcat`.
+  ///
+  /// Requires a real Jellyseerr instance: an Emby-only URL (same mistake as using the Emby
+  /// server address for *seerr) is reported as [ArtemisTransportIssue.wrongService].
+  /// Transport/DNS/TLS failures also set [ArtemisReachabilityResult.reachable] to false.
+  ///
+  /// Transient **network** errors (timeouts, resets) are retried up to 3 times with backoff;
+  /// TLS/DNS and HTTP-shaped results are not retried.
+  Future<ArtemisReachabilityResult> checkReachability() async {
+    final url = _client.baseUrl;
+    if (url.host == 'example.invalid') {
+      debugPrint('[Artemis] checkReachability: skipped (placeholder URL)');
+      return const ArtemisReachabilityResult(
+        reachable: false,
+        issue: ArtemisTransportIssue.unknown,
+        debugLine: '[Artemis] checkReachability skipped (placeholder URL)',
+      );
+    }
+
+    const maxAttempts = 3;
+    const retryDelaysMs = <int>[400, 1200];
+
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        final delayMs = retryDelaysMs[attempt - 1];
+        debugPrint(
+          '[Artemis] checkReachability retry ${attempt + 1}/$maxAttempts after ${delayMs}ms',
+        );
+        await Future<void>.delayed(Duration(milliseconds: delayMs));
+      }
+      try {
+        return await _probeReachabilityOnce();
+      } catch (e, st) {
+        final issue = categorizeArtemisTransportError(e);
+        final retryable =
+            issue == ArtemisTransportIssue.network && attempt < maxAttempts - 1;
+        if (retryable) {
+          continue;
+        }
+        final line = artemisConnectivityDebugLine(e, st);
+        debugPrint('[Artemis] checkReachability FAILED $line');
+        return ArtemisReachabilityResult(
+          reachable: false,
+          issue: issue,
+          debugLine: line,
+        );
+      }
+    }
+
+    return const ArtemisReachabilityResult(
+      reachable: false,
+      issue: ArtemisTransportIssue.unknown,
+      debugLine: '[Artemis] checkReachability: internal retry loop exhausted',
+    );
+  }
+
+  Future<ArtemisReachabilityResult> _probeReachabilityOnce() async {
+    final response = await _client.rawGet('/api/v1/status');
+    if (_responseHeadersSuggestEmby(response.headers)) {
+      const issue = ArtemisTransportIssue.wrongService;
+      debugPrint('[Artemis] checkReachability: headers suggest Emby (not Jellyseerr)');
+      return ArtemisReachabilityResult(
+        reachable: false,
+        issue: issue,
+        debugLine:
+            '[Artemis] wrongService: Emby-like headers for ${_client.baseUrl} status=${response.statusCode}',
+      );
+    }
+
+    final code = response.statusCode;
+    if (code >= 200 && code < 300) {
+      final decoded = _tryDecodeJsonMap(response.body);
+      if (decoded != null && _looksLikeJellyseerrStatus(decoded)) {
+        debugPrint('[Artemis] checkReachability: OK Jellyseerr /api/v1/status');
+        return const ArtemisReachabilityResult(reachable: true);
+      }
+      debugPrint('[Artemis] checkReachability: 200 but body is not Jellyseerr /api/v1/status');
+      return ArtemisReachabilityResult(
+        reachable: false,
+        issue: ArtemisTransportIssue.wrongService,
+        debugLine:
+            '[Artemis] wrongService: HTTP 200 without Jellyseerr status JSON at ${_client.baseUrl}',
+      );
+    }
+
+    if (code == 401 || code == 403) {
+      debugPrint('[Artemis] checkReachability: HTTP $code (auth) — host responded');
+      return const ArtemisReachabilityResult(reachable: true);
+    }
+
+    if (code == 404) {
+      debugPrint('[Artemis] checkReachability: HTTP 404 on /api/v1/status (likely not Jellyseerr)');
+      return ArtemisReachabilityResult(
+        reachable: false,
+        issue: ArtemisTransportIssue.wrongService,
+        debugLine:
+            '[Artemis] wrongService: HTTP 404 on /api/v1/status at ${_client.baseUrl}',
+      );
+    }
+
+    final errBody = _tryDecodeJsonMap(response.body);
+    if (errBody != null &&
+        (_looksLikeJellyseerrErrorPayload(errBody) || _looksLikeJellyseerrStatus(errBody))) {
+      debugPrint('[Artemis] checkReachability: HTTP $code Jellyseerr-style JSON — host reachable');
+      return const ArtemisReachabilityResult(reachable: true);
+    }
+
+    debugPrint('[Artemis] checkReachability: unexpected HTTP $code');
+    return ArtemisReachabilityResult(
+      reachable: false,
+      issue: ArtemisTransportIssue.wrongService,
+      debugLine: '[Artemis] wrongService: unexpected HTTP $code for ${_client.baseUrl}',
+    );
+  }
+
+  /// True if the device can open a TLS connection and get an HTTP response from Jellyseerr.
+  /// Uses the same [JellyseerrClient] as other calls (API key + session cookie), not a bare `http.get`.
+  /// Prefer [checkReachability] when surfacing errors on Android TV.
+  Future<bool> isReachable() async => (await checkReachability()).reachable;
 
   Future<void> clearSession() async {
     _client.setSessionCookie(null);
@@ -116,7 +249,11 @@ final class ArtemisService {
     final key = apiKey.trim();
     _apiKey = key;
     final cookie = await _store.getString(_kCookie);
-    _client = JellyseerrClient(baseUrl: baseUrl, apiKey: key);
+    _client = JellyseerrClient(
+      baseUrl: baseUrl,
+      apiKey: key,
+      httpClient: _httpClient,
+    );
     _client.setSessionCookie(cookie);
   }
 
@@ -129,9 +266,7 @@ final class ArtemisService {
     final u = (username ?? '').trim();
     final p = password ?? '';
     if (u.isEmpty || p.isEmpty) {
-      if (kDebugMode) {
-        debugPrint('[Artemis] syncWithJanus skipped: missing username/password');
-      }
+      debugPrint('[Artemis] syncWithJanus skipped: missing username/password');
       return;
     }
 
@@ -171,9 +306,7 @@ final class ArtemisService {
         final message = (err is Map ? err['error'] : null) as String?;
         if (e.statusCode == 500 &&
             (message ?? '').toLowerCase().contains('hostname already configured')) {
-          if (kDebugMode) {
-            debugPrint('[Artemis] syncWithJanus: hostname configured; retrying login-only');
-          }
+          debugPrint('[Artemis] syncWithJanus: hostname configured; retrying login-only');
           res = await _client.postJsonWithHeaders(
             '/api/v1/auth/jellyfin',
             body: loginPayload,
@@ -184,23 +317,19 @@ final class ArtemisService {
         }
       }
 
-      final cookie = _extractCookieHeader(res.headers['set-cookie']);
+      final rawSetCookie = res.headers['set-cookie'];
+      debugPrint('[Artemis] syncWithJanus: raw Set-Cookie header: $rawSetCookie');
+      final cookie = _extractCookieHeader(rawSetCookie);
       if (cookie != null && cookie.isNotEmpty) {
         _client.setSessionCookie(cookie);
         await _store.setString(_kCookie, cookie);
-        if (kDebugMode) {
-          debugPrint('[Artemis] syncWithJanus: session cookie stored');
-        }
+        debugPrint('[Artemis] syncWithJanus: session cookie stored ($cookie)');
       } else {
-        if (kDebugMode) {
-          debugPrint('[Artemis] syncWithJanus: no Set-Cookie returned');
-        }
+        debugPrint('[Artemis] syncWithJanus: no usable cookie extracted from Set-Cookie header');
       }
     } catch (e, st) {
-      if (kDebugMode) {
-        debugPrint('[Artemis] syncWithJanus failed: $e');
-        debugPrint('$st');
-      }
+      debugPrint('[Artemis] syncWithJanus failed: $e');
+      debugPrint('$st');
       rethrow;
     }
   }
@@ -209,9 +338,7 @@ final class ArtemisService {
     int minMovies = 25,
     int minShows = 25,
   }) async {
-    if (kDebugMode) {
-      debugPrint('[Artemis] getRecommendations: /api/v1/discover/trending');
-    }
+    debugPrint('[Artemis] getRecommendations: baseUrl=${_client.baseUrl}');
     final movies = <ArtemisRecommendationItem>[];
     final shows = <ArtemisRecommendationItem>[];
     final seen = <String>{};
@@ -227,9 +354,9 @@ final class ArtemisService {
       if (results is List) {
         for (final r in results) {
           if (r is! Map) continue;
-          final id = r['id'];
+          final id = _readTmdbId(r['id']);
           final type = r['mediaType'] ?? r['media_type'];
-          if (id is! int) continue;
+          if (id == null) continue;
           final mediaType = _parseMediaType(type);
           if (mediaType == null) continue;
 
@@ -278,11 +405,9 @@ final class ArtemisService {
       page++;
     }
 
-    if (kDebugMode) {
-      debugPrint(
-        '[Artemis] getRecommendations: movies=${movies.length} shows=${shows.length} pages=${page - 1}',
-      );
-    }
+    debugPrint(
+      '[Artemis] getRecommendations: movies=${movies.length} shows=${shows.length} pages=${page - 1}',
+    );
     return ArtemisRecommendations(items: [...movies, ...shows]);
   }
 
@@ -309,9 +434,9 @@ final class ArtemisService {
       if (results is List) {
         for (final r in results) {
           if (r is! Map) continue;
-          final id = r['id'];
+          final id = _readTmdbId(r['id']);
           final type = r['mediaType'] ?? r['media_type'];
-          if (id is! int) continue;
+          if (id == null) continue;
           final mediaType = _parseMediaType(type);
           if (mediaType == null) continue;
 
@@ -469,6 +594,14 @@ final class ArtemisService {
   }
 }
 
+int? _readTmdbId(Object? value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value.trim());
+  return null;
+}
+
 MediaType? _parseMediaType(Object? raw) {
   final v = (raw is String) ? raw.toLowerCase().trim() : '';
   if (v == 'movie') return MediaType.movie;
@@ -594,15 +727,49 @@ String? _extractCookieHeader(String? setCookie) {
   final raw = (setCookie ?? '').trim();
   if (raw.isEmpty) return null;
 
-  final matches = RegExp(r'(^|,\s*)([^=;,\s]+)=([^;]+);').allMatches(raw);
+  const setCookieAttributes = <String>{
+    'path', 'domain', 'expires', 'max-age', 'secure', 'httponly', 'samesite',
+  };
+
+  final matches = RegExp(r'(^|[,;]\s*)([^=;,\s]+)=([^;,]+)').allMatches(raw);
   final parts = <String>[];
   for (final m in matches) {
-    final name = m.group(2);
-    final value = m.group(3);
-    if (name == null || value == null) continue;
+    final name = (m.group(2) ?? '').trim();
+    final value = (m.group(3) ?? '').trim();
     if (name.isEmpty || value.isEmpty) continue;
+    if (setCookieAttributes.contains(name.toLowerCase())) continue;
     parts.add('$name=$value');
   }
   if (parts.isEmpty) return null;
   return parts.join('; ');
+}
+
+bool _responseHeadersSuggestEmby(Map<String, String> headers) {
+  for (final e in headers.entries) {
+    final blob = '${e.key}:${e.value}'.toLowerCase();
+    if (blob.contains('emby')) return true;
+  }
+  return false;
+}
+
+Map<String, dynamic>? _tryDecodeJsonMap(String body) {
+  try {
+    final o = jsonDecode(body);
+    if (o is Map<String, dynamic>) return o;
+    if (o is Map) return o.cast<String, dynamic>();
+  } catch (_) {}
+  return null;
+}
+
+bool _looksLikeJellyseerrStatus(Map<String, dynamic> json) {
+  return json['version'] is String ||
+      json['commitTag'] is String ||
+      json['updateAvailable'] is bool;
+}
+
+bool _looksLikeJellyseerrErrorPayload(Map<String, dynamic> json) {
+  return json.containsKey('message') &&
+      (json.containsKey('statusCode') ||
+          json.containsKey('errors') ||
+          json.containsKey('error'));
 }

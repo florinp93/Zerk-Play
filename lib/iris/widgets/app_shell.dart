@@ -1,12 +1,13 @@
-import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart' as url_launcher;
 
 import '../../app/app.dart';
 import 'app_menu.dart';
+import 'tv_sidebar_shell.dart';
 
 final class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.child});
@@ -36,6 +37,10 @@ final class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (isTvPlatform) {
+      return TvSidebarShell(child: widget.child);
+    }
+
     final mq = MediaQuery.of(context);
     final padded = mq.padding.copyWith(
       top: mq.padding.top + AppFloatingMenu.reservedTopPadding,
@@ -75,30 +80,7 @@ Future<void> _openExternalUrl(String url) async {
   final uri = Uri.tryParse(url);
   if (uri == null) return;
   try {
-    if (Platform.isWindows) {
-      await Process.start(
-        'explorer',
-        [uri.toString()],
-        mode: ProcessStartMode.detached,
-      );
-      return;
-    }
-    if (Platform.isMacOS) {
-      await Process.start(
-        'open',
-        [uri.toString()],
-        mode: ProcessStartMode.detached,
-      );
-      return;
-    }
-    if (Platform.isLinux) {
-      await Process.start(
-        'xdg-open',
-        [uri.toString()],
-        mode: ProcessStartMode.detached,
-      );
-      return;
-    }
+    await url_launcher.launchUrl(uri, mode: url_launcher.LaunchMode.externalApplication);
   } catch (_) {}
 }
 

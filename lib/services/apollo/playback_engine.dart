@@ -423,15 +423,18 @@ final class PlaybackEngine {
       return;
     }
 
+    // Image-based subtitles (PGS/DVDSUB) need extra time for mpv to scan the
+    // subtitle streams; text-based subtitles (ASS, SRT) should also be given a
+    // reasonable window because subtitle track metadata can arrive slightly after
+    // audio tracks on the stream.tracks event.
     final isImageBased = subMeta.isTextSubtitleStream == false ||
         (_norm(subMeta.codec).contains('pgs'));
-    if (isImageBased) {
-      await Future.delayed(const Duration(seconds: 1));
-    }
+    final subTimeout =
+        isImageBased ? const Duration(seconds: 6) : const Duration(seconds: 4);
 
-    final updatedTracks = await _waitTracks();
+    final subTracks = await _waitForSubtitleTracks(timeout: subTimeout);
     final subtitleTrack = _matchSubtitleTrack(
-      updatedTracks.subtitle,
+      subTracks,
       embyIndex: subMeta.index,
       language: subMeta.language,
       title: subMeta.title,
@@ -441,6 +444,43 @@ final class PlaybackEngine {
         await _player.setSubtitleTrack(subtitleTrack);
       } catch (_) {}
     }
+  }
+
+  /// Waits until at least one usable subtitle track is reported, up to [timeout].
+  ///
+  /// Checks [player.state.tracks] first (synchronous snapshot), then subscribes
+  /// to [player.stream.tracks] and keeps polling — re-checking state on each
+  /// 500 ms timeout — so tracks that appear without emitting a stream event are
+  /// also caught.
+  Future<List<SubtitleTrack>> _waitForSubtitleTracks({
+    required Duration timeout,
+  }) async {
+    List<SubtitleTrack> usable(Tracks t) =>
+        t.subtitle.where((s) => s.id != 'auto' && s.id != 'no').toList();
+
+    // Fast path: tracks already available.
+    final initial = usable(_player.state.tracks);
+    if (initial.isNotEmpty) return initial;
+
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        final next = await _player.stream.tracks
+            .firstWhere(
+              (t) => t.subtitle.any((s) => s.id != 'auto' && s.id != 'no'),
+            )
+            .timeout(const Duration(milliseconds: 500));
+        final found = usable(next);
+        if (found.isNotEmpty) return found;
+      } catch (_) {
+        // Timeout or no matching event: check state snapshot before retrying.
+        final snapshot = usable(_player.state.tracks);
+        if (snapshot.isNotEmpty) return snapshot;
+      }
+    }
+
+    // Last-chance snapshot after deadline.
+    return usable(_player.state.tracks);
   }
 
   Future<Tracks> _waitTracks() async {

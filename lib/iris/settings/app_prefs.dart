@@ -3,30 +3,61 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 enum AppLanguage { system, en, ro }
 
+enum CollectionsViewMode { card, grid }
+
 final class AppPrefs {
   const AppPrefs({
     required this.language,
     required this.showFeedbackButton,
+    required this.startFullscreen,
+    required this.collectionsViewMode,
   });
 
   final AppLanguage language;
   final bool showFeedbackButton;
 
+  /// Start the app in borderless fullscreen on desktop.
+  final bool startFullscreen;
+
+  /// Collections page layout: large cards or cover-art grid.
+  final CollectionsViewMode collectionsViewMode;
+
   static const defaults = AppPrefs(
     language: AppLanguage.system,
     showFeedbackButton: true,
+    startFullscreen: false,
+    collectionsViewMode: CollectionsViewMode.card,
   );
+
+  AppPrefs copyWith({
+    AppLanguage? language,
+    bool? showFeedbackButton,
+    bool? startFullscreen,
+    CollectionsViewMode? collectionsViewMode,
+  }) => AppPrefs(
+        language: language ?? this.language,
+        showFeedbackButton: showFeedbackButton ?? this.showFeedbackButton,
+        startFullscreen: startFullscreen ?? this.startFullscreen,
+        collectionsViewMode: collectionsViewMode ?? this.collectionsViewMode,
+      );
 
   static const _kAppLanguage = 'app_language';
   static const _kShowFeedbackButton = 'app_show_feedback_button';
+  static const _kStartFullscreen = 'app_start_fullscreen';
+  static const _kCollectionsView = 'app_collections_view';
 
   static Future<AppPrefs> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = (prefs.getString(_kAppLanguage) ?? '').trim().toLowerCase();
     final show = prefs.getBool(_kShowFeedbackButton) ?? defaults.showFeedbackButton;
+    final fs = prefs.getBool(_kStartFullscreen) ?? defaults.startFullscreen;
+    final cvRaw = prefs.getString(_kCollectionsView) ?? '';
+    final cv = cvRaw == 'grid' ? CollectionsViewMode.grid : CollectionsViewMode.card;
     return AppPrefs(
       language: _parseLanguage(raw) ?? defaults.language,
       showFeedbackButton: show,
+      startFullscreen: fs,
+      collectionsViewMode: cv,
     );
   }
 
@@ -34,6 +65,11 @@ final class AppPrefs {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kAppLanguage, _encodeLanguage(value.language));
     await prefs.setBool(_kShowFeedbackButton, value.showFeedbackButton);
+    await prefs.setBool(_kStartFullscreen, value.startFullscreen);
+    await prefs.setString(
+      _kCollectionsView,
+      value.collectionsViewMode == CollectionsViewMode.grid ? 'grid' : 'card',
+    );
   }
 
   Locale? toLocale() {

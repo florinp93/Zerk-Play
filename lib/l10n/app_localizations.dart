@@ -260,6 +260,108 @@ abstract class AppLocalizations {
   /// **'Trending unavailable'**
   String get trendingUnavailable;
 
+  /// No description provided for @artemisConnectionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t reach *seerr. Check URL and API key, and that this device is online.'**
+  String get artemisConnectionFailed;
+
+  /// No description provided for @artemisConnectionFailedCertificate.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t reach *seerr: HTTPS or certificate problem. Check the URL, server certificate chain, and that the *seerr base URL is correct (not the Emby URL).'**
+  String get artemisConnectionFailedCertificate;
+
+  /// No description provided for @artemisConnectionFailedDns.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t reach *seerr: could not resolve the server name. Check Wi‑Fi DNS (try disabling Private DNS) or the URL you entered.'**
+  String get artemisConnectionFailedDns;
+
+  /// No description provided for @artemisConnectionFailedNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t reach *seerr: network error (timeout, refused, or unreachable). Check the TV is online, the server is up, and IPv6/DNS for your domain.'**
+  String get artemisConnectionFailedNetwork;
+
+  /// No description provided for @artemisWrongServerNotJellyseerr.
+  ///
+  /// In en, this message translates to:
+  /// **'This URL is not your *seerr server (e.g. it points to Emby). Use your Jellyseerr base URL — often a separate subdomain such as https://request.example.com — not your Emby URL.'**
+  String get artemisWrongServerNotJellyseerr;
+
+  /// No description provided for @artemisDiagnosticsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'*seerr connection diagnostics'**
+  String get artemisDiagnosticsTitle;
+
+  /// No description provided for @artemisDiagnosticsOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection diagnostics'**
+  String get artemisDiagnosticsOpen;
+
+  /// No description provided for @artemisDiagnosticsTest.
+  ///
+  /// In en, this message translates to:
+  /// **'Test connection'**
+  String get artemisDiagnosticsTest;
+
+  /// No description provided for @artemisDiagnosticsSeerrUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved *seerr URL'**
+  String get artemisDiagnosticsSeerrUrl;
+
+  /// No description provided for @artemisDiagnosticsResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Result'**
+  String get artemisDiagnosticsResult;
+
+  /// No description provided for @artemisDiagnosticsDebugLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Technical detail (for support)'**
+  String get artemisDiagnosticsDebugLine;
+
+  /// No description provided for @artemisDiagnosticsCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy details'**
+  String get artemisDiagnosticsCopy;
+
+  /// No description provided for @artemisDiagnosticsCopyDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied to clipboard'**
+  String get artemisDiagnosticsCopyDone;
+
+  /// No description provided for @artemisDiagnosticsNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Setup is incomplete: save your *seerr URL and API key in setup first.'**
+  String get artemisDiagnosticsNotConfigured;
+
+  /// No description provided for @artemisDiagnosticsInfraTips.
+  ///
+  /// In en, this message translates to:
+  /// **'If only this device fails:\n• Server: full TLS chain, correct SNI, TLS 1.2+; avoid broken TLS renegotiation.\n• DNS: check A and AAAA for your *seerr host; fix or remove a bad IPv6 (AAAA) record.\n• Android TV: try disabling Private DNS; check Pi-hole / router DNS.\n• Reverse proxy: this hostname must forward to Jellyseerr, not Emby.'**
+  String get artemisDiagnosticsInfraTips;
+
+  /// No description provided for @artemisDiagnosticsReachableYes.
+  ///
+  /// In en, this message translates to:
+  /// **'Reachable — Jellyseerr responded as expected.'**
+  String get artemisDiagnosticsReachableYes;
+
+  /// No description provided for @artemisDiagnosticsReachableNo.
+  ///
+  /// In en, this message translates to:
+  /// **'Not reachable'**
+  String get artemisDiagnosticsReachableNo;
+
   /// No description provided for @save.
   ///
   /// In en, this message translates to:
@@ -793,6 +895,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Search failed'**
   String get searchFailed;
+
+  /// No description provided for @exitApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit App'**
+  String get exitApp;
+
+  /// No description provided for @exitAppConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to exit?'**
+  String get exitAppConfirm;
+
+  /// No description provided for @exit.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit'**
+  String get exit;
+
+  /// No description provided for @playerSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Player / MPV…'**
+  String get playerSettings;
+
+  /// No description provided for @playerSettingsMpvTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Player (mpv)'**
+  String get playerSettingsMpvTitle;
+
+  /// No description provided for @playerSettingsMatchRefreshRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Match display refresh rate to video'**
+  String get playerSettingsMatchRefreshRate;
+
+  /// No description provided for @playerSettingsMatchRefreshRateHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Primary display only. May flicker; multi‑monitor and HDR can behave oddly. Off by default.'**
+  String get playerSettingsMatchRefreshRateHelp;
+
+  /// No description provided for @playerSettingsMatchRefreshRateFullscreenOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Only while fullscreen'**
+  String get playerSettingsMatchRefreshRateFullscreenOnly;
+
+  /// No description provided for @playerSettingsMpvPathFull.
+  ///
+  /// In en, this message translates to:
+  /// **'mpv.conf:\n{path}'**
+  String playerSettingsMpvPathFull(Object path);
+
+  /// No description provided for @playerSettingsMpvHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Loaded after built‑in defaults so options here override them. mpv manual: https://mpv.io/manual/master/'**
+  String get playerSettingsMpvHelp;
+
+  /// No description provided for @playerSettingsOpenConfigFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Open config folder'**
+  String get playerSettingsOpenConfigFolder;
 }
 
 class _AppLocalizationsDelegate

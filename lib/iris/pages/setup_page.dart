@@ -107,7 +107,7 @@ final class _SetupPageState extends State<SetupPage> {
           subtitleLanguage: subtitleLanguage,
         ),
       );
-      final nextAppPrefs = AppPrefs(
+      final nextAppPrefs = AppPrefs.defaults.copyWith(
         language: _appLanguage,
         showFeedbackButton: _showFeedbackButton,
       );

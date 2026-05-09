@@ -5,8 +5,11 @@ import '../../app/app.dart';
 import '../../app/services/app_services.dart';
 import '../../core/emby/models/emby_item.dart';
 import '../../l10n/l10n.dart';
+import '../settings/app_prefs.dart';
 import '../widgets/ott_focusable.dart';
 import '../widgets/ott_shimmer.dart';
+import '../widgets/tv_focus_scroll.dart';
+import '../widgets/tv_sidebar_shell.dart' show isTvPlatform;
 
 final class CollectionsPage extends StatefulWidget {
   const CollectionsPage({super.key});
@@ -18,6 +21,15 @@ final class CollectionsPage extends StatefulWidget {
 final class _CollectionsPageState extends State<CollectionsPage> with RouteAware {
   Future<List<EmbyItem>>? _future;
   PageRoute<dynamic>? _route;
+  CollectionsViewMode _viewMode = CollectionsViewMode.card;
+
+  @override
+  void initState() {
+    super.initState();
+    AppPrefs.load().then((p) {
+      if (mounted) setState(() => _viewMode = p.collectionsViewMode);
+    });
+  }
 
   @override
   void didChangeDependencies() {
@@ -48,6 +60,14 @@ final class _CollectionsPageState extends State<CollectionsPage> with RouteAware
     });
   }
 
+  void _toggleView() {
+    final next = _viewMode == CollectionsViewMode.card
+        ? CollectionsViewMode.grid
+        : CollectionsViewMode.card;
+    setState(() => _viewMode = next);
+    AppPrefs.load().then((p) => AppPrefs.save(p.copyWith(collectionsViewMode: next)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final services = AppServicesScope.of(context);
@@ -65,7 +85,7 @@ final class _CollectionsPageState extends State<CollectionsPage> with RouteAware
               slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 12, 22, 12),
+                    padding: const EdgeInsets.fromLTRB(22, 12, 16, 12),
                     child: Row(
                       children: [
                         Text(
@@ -73,6 +93,18 @@ final class _CollectionsPageState extends State<CollectionsPage> with RouteAware
                           style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                 fontWeight: FontWeight.w800,
                               ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          tooltip: _viewMode == CollectionsViewMode.card
+                              ? 'Switch to grid view'
+                              : 'Switch to card view',
+                          icon: Icon(
+                            _viewMode == CollectionsViewMode.card
+                                ? Icons.grid_view_rounded
+                                : Icons.view_agenda_rounded,
+                          ),
+                          onPressed: _toggleView,
                         ),
                       ],
                     ),
@@ -99,35 +131,10 @@ final class _CollectionsPageState extends State<CollectionsPage> with RouteAware
                       child: Text(l10n.noCollectionsFound),
                     ),
                   )
+                else if (_viewMode == CollectionsViewMode.grid)
+                  _GridSliver(collections: collections, services: services)
                 else
-                  SliverLayoutBuilder(
-                    builder: (context, constraints) {
-                      final twoCols = constraints.crossAxisExtent >= 900;
-                      final cols = twoCols ? 2 : 1;
-                      return SliverPadding(
-                        padding: const EdgeInsets.symmetric(horizontal: 22),
-                        sliver: SliverGrid(
-                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: cols,
-                            crossAxisSpacing: 22,
-                            mainAxisSpacing: 22,
-                            mainAxisExtent: 500,
-                          ),
-                          delegate: SliverChildBuilderDelegate(
-                            childCount: collections.length,
-                            (context, index) {
-                              final c = collections[index];
-                              return _CollectionSection(
-                                collection: c,
-                                services: services,
-                                onOpenMovie: (id) => context.push('/details/$id'),
-                              );
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  _CardSliver(collections: collections, services: services),
                 const SliverToBoxAdapter(child: SizedBox(height: 22)),
               ],
             );
@@ -138,16 +145,158 @@ final class _CollectionsPageState extends State<CollectionsPage> with RouteAware
   }
 }
 
+// ── Grid view (same cover-art tiles as movies/series) ────────────────────────
+
+final class _GridSliver extends StatelessWidget {
+  const _GridSliver({required this.collections, required this.services});
+
+  final List<EmbyItem> collections;
+  final AppServices services;
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.crossAxisExtent;
+        const maxExtent = 180.0;
+        final columns = (width / maxExtent).floor().clamp(2, 12);
+        return SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          sliver: SliverGrid(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 2 / 3,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              childCount: collections.length,
+              (context, index) {
+                final c = collections[index];
+                return _CollectionGridTile(
+                  collection: c,
+                  imageUri: services.hermes.primaryImageUri(c, maxWidth: 420),
+                  onOpen: () => context.push('/collection/${c.id}'),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+final class _CollectionGridTile extends StatelessWidget {
+  const _CollectionGridTile({
+    required this.collection,
+    required this.imageUri,
+    required this.onOpen,
+  });
+
+  final EmbyItem collection;
+  final Uri imageUri;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return OttFocusableCard(
+      onPressed: onOpen,
+      borderRadius: 16,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.network(
+            imageUri.toString(),
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                const ColoredBox(color: Colors.black12),
+          ),
+          const IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Color(0xD6000000), Color(0x00000000)],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 10,
+            right: 10,
+            bottom: 10,
+            child: Text(
+              collection.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Card view (original backdrop + horizontal scroll) ────────────────────────
+
+final class _CardSliver extends StatelessWidget {
+  const _CardSliver({required this.collections, required this.services});
+
+  final List<EmbyItem> collections;
+  final AppServices services;
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        final twoCols = constraints.crossAxisExtent >= 900;
+        final cols = twoCols ? 2 : 1;
+        return SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          sliver: SliverGrid(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: cols,
+              crossAxisSpacing: 22,
+              mainAxisSpacing: 22,
+              mainAxisExtent: 500,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              childCount: collections.length,
+              (context, index) {
+                final c = collections[index];
+                return _CollectionSection(
+                  collection: c,
+                  services: services,
+                  onOpenMovie: (id) => context.push('/details/$id'),
+                  onOpenCollection: () =>
+                      context.push('/collection/${c.id}'),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 final class _CollectionSection extends StatefulWidget {
   const _CollectionSection({
     required this.collection,
     required this.services,
     required this.onOpenMovie,
+    required this.onOpenCollection,
   });
 
   final EmbyItem collection;
   final AppServices services;
   final ValueChanged<String> onOpenMovie;
+  final VoidCallback onOpenCollection;
 
   @override
   State<_CollectionSection> createState() => _CollectionSectionState();
@@ -206,10 +355,7 @@ final class _CollectionSectionState extends State<_CollectionSection> {
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter,
                     end: Alignment.topCenter,
-                    colors: [
-                      Color(0xCC000000),
-                      Color(0x00000000),
-                    ],
+                    colors: [Color(0xCC000000), Color(0x00000000)],
                   ),
                 ),
               ),
@@ -220,7 +366,11 @@ final class _CollectionSectionState extends State<_CollectionSection> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _CollectionHeader(collection: collection, services: services),
+                _CollectionHeader(
+                  collection: collection,
+                  services: services,
+                  onViewAll: widget.onOpenCollection,
+                ),
                 const SizedBox(height: 14),
                 FutureBuilder<List<EmbyItem>>(
                   future: _moviesFuture,
@@ -257,10 +407,15 @@ final class _CollectionSectionState extends State<_CollectionSection> {
 }
 
 final class _CollectionHeader extends StatelessWidget {
-  const _CollectionHeader({required this.collection, required this.services});
+  const _CollectionHeader({
+    required this.collection,
+    required this.services,
+    required this.onViewAll,
+  });
 
   final EmbyItem collection;
   final AppServices services;
+  final VoidCallback onViewAll;
 
   @override
   Widget build(BuildContext context) {
@@ -311,6 +466,17 @@ final class _CollectionHeader extends StatelessWidget {
                   ),
             ),
           ],
+          const SizedBox(height: 10),
+          TextButton.icon(
+            onPressed: onViewAll,
+            icon: const Icon(Icons.grid_view_rounded, size: 18),
+            label: const Text('View all'),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              backgroundColor:
+                  Colors.black.withValues(alpha: 0.38),
+            ),
+          ),
         ],
       ),
     );
@@ -351,10 +517,7 @@ final class _MoviePosterCard extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter,
                     end: Alignment.topCenter,
-                    colors: [
-                      Color(0xCC000000),
-                      Color(0x00000000),
-                    ],
+                    colors: [Color(0xCC000000), Color(0x00000000)],
                   ),
                 ),
               ),
@@ -440,6 +603,7 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
   @override
   Widget build(BuildContext context) {
     if (widget.itemCount <= 0) return const SizedBox.shrink();
+    final tv = isTvPlatform;
     final viewportWidth = _controller.hasClients
         ? _controller.position.viewportDimension
         : MediaQuery.sizeOf(context).width;
@@ -454,33 +618,29 @@ final class _HorizontalRowListState extends State<_HorizontalRowList> {
             scrollDirection: Axis.horizontal,
             itemCount: widget.itemCount,
             padding: EdgeInsets.zero,
+            cacheExtent: tv ? 1500 : null,
             separatorBuilder: (context, index) => const SizedBox(width: 12),
-            itemBuilder: widget.itemBuilder,
+            itemBuilder: tv
+                ? (context, index) => TvFocusScrollItem(
+                      scrollController: _controller,
+                      child: widget.itemBuilder(context, index),
+                    )
+                : widget.itemBuilder,
           ),
-          if (_canScrollLeft)
+          if (!tv && _canScrollLeft)
             Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
+              left: 0, top: 0, bottom: 0,
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: _RowNavButton(
-                  icon: Icons.chevron_left,
-                  onPressed: () => _scrollBy(-jump),
-                ),
+                child: _RowNavButton(icon: Icons.chevron_left, onPressed: () => _scrollBy(-jump)),
               ),
             ),
-          if (_canScrollRight)
+          if (!tv && _canScrollRight)
             Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
+              right: 0, top: 0, bottom: 0,
               child: Align(
                 alignment: Alignment.centerRight,
-                child: _RowNavButton(
-                  icon: Icons.chevron_right,
-                  onPressed: () => _scrollBy(jump),
-                ),
+                child: _RowNavButton(icon: Icons.chevron_right, onPressed: () => _scrollBy(jump)),
               ),
             ),
         ],

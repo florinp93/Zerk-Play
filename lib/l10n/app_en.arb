@@ -34,6 +34,23 @@
   "youMightEnjoy": "You might enjoy",
   "yourNextBinge": "Your next binge",
   "trendingUnavailable": "Trending unavailable",
+  "artemisConnectionFailed": "Can't reach *seerr. Check URL and API key, and that this device is online.",
+  "artemisConnectionFailedCertificate": "Can't reach *seerr: HTTPS or certificate problem. Check the URL, server certificate chain, and that the *seerr base URL is correct (not the Emby URL).",
+  "artemisConnectionFailedDns": "Can't reach *seerr: could not resolve the server name. Check Wi‑Fi DNS (try disabling Private DNS) or the URL you entered.",
+  "artemisConnectionFailedNetwork": "Can't reach *seerr: network error (timeout, refused, or unreachable). Check the TV is online, the server is up, and IPv6/DNS for your domain.",
+  "artemisWrongServerNotJellyseerr": "This URL is not your *seerr server (e.g. it points to Emby). Use your Jellyseerr base URL — often a separate subdomain such as https://request.example.com — not your Emby URL.",
+  "artemisDiagnosticsTitle": "*seerr connection diagnostics",
+  "artemisDiagnosticsOpen": "Connection diagnostics",
+  "artemisDiagnosticsTest": "Test connection",
+  "artemisDiagnosticsSeerrUrl": "Saved *seerr URL",
+  "artemisDiagnosticsResult": "Result",
+  "artemisDiagnosticsDebugLine": "Technical detail (for support)",
+  "artemisDiagnosticsCopy": "Copy details",
+  "artemisDiagnosticsCopyDone": "Copied to clipboard",
+  "artemisDiagnosticsNotConfigured": "Setup is incomplete: save your *seerr URL and API key in setup first.",
+  "artemisDiagnosticsInfraTips": "If only this device fails:\n• Server: full TLS chain, correct SNI, TLS 1.2+; avoid broken TLS renegotiation.\n• DNS: check A and AAAA for your *seerr host; fix or remove a bad IPv6 (AAAA) record.\n• Android TV: try disabling Private DNS; check Pi-hole / router DNS.\n• Reverse proxy: this hostname must forward to Jellyseerr, not Emby.",
+  "artemisDiagnosticsReachableYes": "Reachable — Jellyseerr responded as expected.",
+  "artemisDiagnosticsReachableNo": "Not reachable",
 
   "save": "Save",
   "cancel": "Cancel",
@@ -171,5 +188,23 @@
       "query": {}
     }
   },
-  "searchFailed": "Search failed"
+  "searchFailed": "Search failed",
+
+  "exitApp": "Exit App",
+  "exitAppConfirm": "Are you sure you want to exit?",
+  "exit": "Exit",
+
+  "playerSettings": "Player / MPV…",
+  "playerSettingsMpvTitle": "Player (mpv)",
+  "playerSettingsMatchRefreshRate": "Match display refresh rate to video",
+  "playerSettingsMatchRefreshRateHelp": "Primary display only. May flicker; multi‑monitor and HDR can behave oddly. Off by default.",
+  "playerSettingsMatchRefreshRateFullscreenOnly": "Only while fullscreen",
+  "playerSettingsMpvPathFull": "mpv.conf:\n{path}",
+  "@playerSettingsMpvPathFull": {
+    "placeholders": {
+      "path": {}
+    }
+  },
+  "playerSettingsMpvHelp": "Loaded after built‑in defaults so options here override them. mpv manual: https://mpv.io/manual/master/",
+  "playerSettingsOpenConfigFolder": "Open config folder"
 }

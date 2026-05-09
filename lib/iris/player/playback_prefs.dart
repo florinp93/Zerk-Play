@@ -14,6 +14,8 @@ final class PlaybackPrefs {
     required this.subtitleMode,
     required this.subtitleLanguage,
     required this.volume,
+    required this.matchDisplayRefreshRate,
+    required this.matchDisplayRefreshRateFullscreenOnly,
   });
 
   final PlaybackQualityPreference qualityPreference;
@@ -22,12 +24,20 @@ final class PlaybackPrefs {
   final String subtitleLanguage;
   final double volume;
 
+  /// Windows: switch primary display refresh rate to match video FPS (best-effort).
+  final bool matchDisplayRefreshRate;
+
+  /// When [matchDisplayRefreshRate] is true, only apply while in fullscreen.
+  final bool matchDisplayRefreshRateFullscreenOnly;
+
   PlaybackPrefs copyWith({
     PlaybackQualityPreference? qualityPreference,
     String? audioLanguage,
     SubtitlePreferenceMode? subtitleMode,
     String? subtitleLanguage,
     double? volume,
+    bool? matchDisplayRefreshRate,
+    bool? matchDisplayRefreshRateFullscreenOnly,
   }) {
     return PlaybackPrefs(
       qualityPreference: qualityPreference ?? this.qualityPreference,
@@ -35,6 +45,9 @@ final class PlaybackPrefs {
       subtitleMode: subtitleMode ?? this.subtitleMode,
       subtitleLanguage: subtitleLanguage ?? this.subtitleLanguage,
       volume: volume ?? this.volume,
+      matchDisplayRefreshRate: matchDisplayRefreshRate ?? this.matchDisplayRefreshRate,
+      matchDisplayRefreshRateFullscreenOnly:
+          matchDisplayRefreshRateFullscreenOnly ?? this.matchDisplayRefreshRateFullscreenOnly,
     );
   }
 
@@ -44,6 +57,8 @@ final class PlaybackPrefs {
     subtitleMode: SubtitlePreferenceMode.auto,
     subtitleLanguage: '',
     volume: 70,
+    matchDisplayRefreshRate: false,
+    matchDisplayRefreshRateFullscreenOnly: true,
   );
 
   static const _kQuality = 'playback_quality';
@@ -51,6 +66,8 @@ final class PlaybackPrefs {
   static const _kSubMode = 'playback_sub_mode';
   static const _kSubLang = 'playback_sub_lang';
   static const _kVolume = 'playback_volume';
+  static const _kMatchHz = 'playback_match_display_hz';
+  static const _kMatchHzFsOnly = 'playback_match_display_hz_fs_only';
 
   static Future<PlaybackPrefs> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -60,6 +77,9 @@ final class PlaybackPrefs {
     final subLang = (prefs.getString(_kSubLang) ?? '').trim();
     final volumeRaw = prefs.getDouble(_kVolume) ?? (prefs.getInt(_kVolume)?.toDouble());
     final volume = (volumeRaw ?? defaults.volume).clamp(0.0, 100.0);
+    final matchHz = prefs.getBool(_kMatchHz) ?? defaults.matchDisplayRefreshRate;
+    final matchHzFs =
+        prefs.getBool(_kMatchHzFsOnly) ?? defaults.matchDisplayRefreshRateFullscreenOnly;
 
     return PlaybackPrefs(
       qualityPreference: _parseQuality(qualityRaw) ?? defaults.qualityPreference,
@@ -67,6 +87,8 @@ final class PlaybackPrefs {
       subtitleMode: _parseSubtitleMode(subModeRaw) ?? defaults.subtitleMode,
       subtitleLanguage: subLang,
       volume: volume,
+      matchDisplayRefreshRate: matchHz,
+      matchDisplayRefreshRateFullscreenOnly: matchHzFs,
     );
   }
 
@@ -77,6 +99,8 @@ final class PlaybackPrefs {
     await prefs.setString(_kSubMode, _encodeSubtitleMode(value.subtitleMode));
     await prefs.setString(_kSubLang, value.subtitleLanguage.trim());
     await prefs.setDouble(_kVolume, value.volume.clamp(0.0, 100.0));
+    await prefs.setBool(_kMatchHz, value.matchDisplayRefreshRate);
+    await prefs.setBool(_kMatchHzFsOnly, value.matchDisplayRefreshRateFullscreenOnly);
   }
 
   int? maxStreamingBitrate() {
