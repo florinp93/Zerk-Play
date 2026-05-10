@@ -25,6 +25,7 @@ final class _SetupPageState extends State<SetupPage> {
   String _subtitleSelection = 'auto';
   AppLanguage _appLanguage = AppPrefs.defaults.language;
   bool _showFeedbackButton = AppPrefs.defaults.showFeedbackButton;
+  bool _acceptInvalidCerts = AppPrefs.defaults.acceptInvalidCertificates;
 
   bool _isLoading = false;
   String? _error;
@@ -65,6 +66,7 @@ final class _SetupPageState extends State<SetupPage> {
         _subtitleSelection = subtitleSelection;
         _appLanguage = appPrefs.language;
         _showFeedbackButton = appPrefs.showFeedbackButton;
+        _acceptInvalidCerts = appPrefs.acceptInvalidCertificates;
       });
     });
   }
@@ -110,8 +112,10 @@ final class _SetupPageState extends State<SetupPage> {
       final nextAppPrefs = AppPrefs.defaults.copyWith(
         language: _appLanguage,
         showFeedbackButton: _showFeedbackButton,
+        acceptInvalidCertificates: _acceptInvalidCerts,
       );
       await AppPrefs.save(nextAppPrefs);
+      AppPrefs.applyHttpOverrides(nextAppPrefs.acceptInvalidCertificates);
 
       final cfg = await services.config.load();
       if (cfg == null) {
@@ -207,6 +211,21 @@ final class _SetupPageState extends State<SetupPage> {
                         onSubmitted: (_) => _isLoading ? null : _submit(),
                         decoration: const InputDecoration(labelText: '*seerr API Key'),
                         enabled: !_isLoading,
+                      ),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Accept invalid SSL certificates'),
+                        subtitle: const Text(
+                            'Enable if your server uses an IP address or self-signed certificate'),
+                        value: _acceptInvalidCerts,
+                        onChanged: _isLoading
+                            ? null
+                            : (v) {
+                                setState(() => _acceptInvalidCerts = v);
+                                AppPrefs.applyHttpOverrides(v);
+                              },
                       ),
                       const SizedBox(height: 18),
                       Text(

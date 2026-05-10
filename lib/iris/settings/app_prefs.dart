@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -65,6 +67,10 @@ final class AppPrefs {
     );
   }
 
+  static void applyHttpOverrides(bool accept) {
+    HttpOverrides.global = accept ? _TrustAllCerts() : null;
+  }
+
   static Future<void> save(AppPrefs value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kAppLanguage, _encodeLanguage(value.language));
@@ -114,4 +120,10 @@ String _encodeLanguage(AppLanguage value) {
     case AppLanguage.ro:
       return 'ro';
   }
+}
+
+final class _TrustAllCerts extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) =>
+      super.createHttpClient(context)..badCertificateCallback = (_, __, ___) => true;
 }

@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -8,12 +8,6 @@ import 'package:window_manager/window_manager.dart';
 import 'app/app.dart';
 import 'app/services/app_services.dart';
 import 'iris/settings/app_prefs.dart';
-
-final class _TrustAllCerts extends HttpOverrides {
-  @override
-  HttpClient createHttpClient(SecurityContext? context) =>
-      super.createHttpClient(context)..badCertificateCallback = (_, __, ___) => true;
-}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,9 +28,7 @@ Future<void> main() async {
     });
 
     final prefs = await AppPrefs.load();
-    if (prefs.acceptInvalidCertificates) {
-      HttpOverrides.global = _TrustAllCerts();
-    }
+    AppPrefs.applyHttpOverrides(prefs.acceptInvalidCertificates);
     if (prefs.startFullscreen) {
       await windowManager.setFullScreen(true);
     }

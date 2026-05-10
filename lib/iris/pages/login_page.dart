@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/app.dart';
 import '../../l10n/l10n.dart';
+import '../settings/app_prefs.dart';
 
 final class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -17,6 +18,8 @@ final class _LoginPageState extends State<LoginPage> {
 
   bool _isLoading = false;
   String? _error;
+  bool _acceptInvalidCerts = AppPrefs.defaults.acceptInvalidCertificates;
+  bool _showAdvanced = false;
 
   @override
   void initState() {
@@ -25,6 +28,7 @@ final class _LoginPageState extends State<LoginPage> {
       final services = AppServicesScope.of(context);
       final u = await services.config.getEmbyUsername();
       final p = await services.config.getEmbyPassword();
+      final prefs = await AppPrefs.load();
       if (!mounted) return;
       if ((_usernameController.text.trim().isEmpty) && u != null) {
         _usernameController.text = u;
@@ -32,6 +36,7 @@ final class _LoginPageState extends State<LoginPage> {
       if ((_passwordController.text.isEmpty) && p != null) {
         _passwordController.text = p;
       }
+      setState(() => _acceptInvalidCerts = prefs.acceptInvalidCertificates);
     });
   }
 
@@ -162,6 +167,51 @@ final class _LoginPageState extends State<LoginPage> {
                             )
                           : Text(l10n.signIn),
                     ),
+                    const SizedBox(height: 16),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => setState(() => _showAdvanced = !_showAdvanced),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _showAdvanced
+                                  ? Icons.expand_less_rounded
+                                  : Icons.expand_more_rounded,
+                              size: 18,
+                              color: scheme.onSurface.withValues(alpha: 0.5),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Advanced',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurface.withValues(alpha: 0.5),
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (_showAdvanced)
+                      SwitchListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Accept invalid SSL certificates'),
+                        subtitle: const Text(
+                            'Enable if your server uses an IP address or self-signed certificate'),
+                        value: _acceptInvalidCerts,
+                        onChanged: _isLoading
+                            ? null
+                            : (v) async {
+                                setState(() => _acceptInvalidCerts = v);
+                                AppPrefs.applyHttpOverrides(v);
+                                final current = await AppPrefs.load();
+                                await AppPrefs.save(
+                                    current.copyWith(acceptInvalidCertificates: v));
+                              },
+                      ),
                   ],
                 ),
               ),

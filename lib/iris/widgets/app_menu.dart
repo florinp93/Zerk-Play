@@ -221,6 +221,7 @@ Future<void> showSettingsDialog({
                     acceptInvalidCertificates: acceptInvalidCerts,
                   );
                   await AppPrefs.save(nextAppPrefs);
+                  AppPrefs.applyHttpOverrides(nextAppPrefs.acceptInvalidCertificates);
                   if (context.mounted) {
                     final scope = AppUiScope.of(context);
                     scope.locale.value = nextAppPrefs.toLocale();
