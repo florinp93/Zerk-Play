@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-05-10
+
+### Added
+- **SSL / self-signed certificate bypass** — a new "Accept invalid SSL certificates" toggle in Settings → Network allows the app to connect to Emby servers accessed by IP address or with self-signed certificates. Disabled by default; enabling it suppresses TLS verification app-wide.
+- **Fullscreen exit shortcut** — pressing **F11** now toggles the app between fullscreen and windowed mode at any time, without opening Settings.
+- **Quit button** — a "Quit app" button has been added to the bottom of the Settings dialog (desktop only) for users who prefer an in-app way to close the application.
+- **Refresh rate revert on exit** — a new "Revert refresh rate on exit" toggle (Settings → Display, only active when refresh rate matching is enabled) restores the display to its original Hz when playback ends.
+- **DTS-HD MA in recommended passthrough preset** — the recommended `audio-spdif` passthrough preset now includes `dts-hd`, and two new presets have been added: "DTS-HD MA" and "TrueHD + DTS + DTS-HD MA".
+- **Keyboard back navigation** — pressing **Escape** or **Backspace** now navigates back to the previous screen (guarded: does nothing when a text field has focus).
+
+### Changed
+- **Patched libmpv (mitzsch build)** — the bundled `libmpv-2.dll` has been replaced with the [mitzsch patched build (2026-04-10)](https://github.com/mitzsch/mpv-winbuild/releases/tag/2026-04-10-3e3048a) which includes the corrected TrueHD packet logic from the Plex HTPC patches fork. This is the primary fix for TrueHD and DTS-HD MA bitstream passthrough failures on Windows.
+- **Scroll physics** — global scroll behavior switched from `BouncingScrollPhysics` to `ClampingScrollPhysics` on all platforms. This eliminates the "jumpy" feel on desktop mouse-wheel scrolling and prevents overscroll above position 0 that caused the home page spotlight to appear clipped behind the navigation bar.
+- **Library sort persists** — the selected sort order (Name, Date Added, Year, Rating) is now saved per library type (Movies / Series) and restored when returning to the library page.
+
+### Fixed
+- Home page spotlight hero carousel no longer appears half-clipped behind the navigation bar when scrolling back to the top.
+- Filter sort selection in the Movies and Series library pages now persists across navigation and app restarts.
+- TLS handshake errors when connecting to servers with IP-based or self-signed SSL certificates can now be resolved via the new settings toggle.
+
+---
+
 ## [1.1.0] - 2026-05-09
 
 ### Added
