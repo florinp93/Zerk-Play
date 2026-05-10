@@ -40,8 +40,10 @@ Future<void> showSettingsDialog({
   var appLanguage = appPrefs.language;
   var showFeedbackButton = appPrefs.showFeedbackButton;
   var startFullscreen = appPrefs.startFullscreen;
+  var acceptInvalidCerts = appPrefs.acceptInvalidCertificates;
   var matchHz = playbackPrefs.matchDisplayRefreshRate;
   var matchHzFsOnly = playbackPrefs.matchDisplayRefreshRateFullscreenOnly;
+  var revertHz = playbackPrefs.revertRefreshRateOnExit;
   var subtitleAppearance = await SubtitlePrefs.load();
   if (!context.mounted) return;
 
@@ -100,6 +102,25 @@ Future<void> showSettingsDialog({
                       value: matchHzFsOnly,
                       onChanged: matchHz ? (v) => setState(() => matchHzFsOnly = v) : null,
                     ),
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Revert refresh rate on exit'),
+                      subtitle: const Text('Restores original Hz when playback ends'),
+                      value: revertHz,
+                      onChanged: matchHz ? (v) => setState(() => revertHz = v) : null,
+                    ),
+                    const Divider(height: 28),
+                    Text('Network', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 4),
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Accept invalid SSL certificates'),
+                      subtitle: const Text('Required when your server uses an IP address or self-signed cert. Reduces connection security.'),
+                      value: acceptInvalidCerts,
+                      onChanged: (v) => setState(() => acceptInvalidCerts = v),
+                    ),
                   ],
                   const Divider(height: 28),
                   MediaQuery(
@@ -129,6 +150,7 @@ Future<void> showSettingsDialog({
                             playbackPrefs = next;
                             matchHz = next.matchDisplayRefreshRate;
                             matchHzFsOnly = next.matchDisplayRefreshRateFullscreenOnly;
+                            revertHz = next.revertRefreshRateOnExit;
                           });
                         },
                       );
@@ -155,6 +177,17 @@ Future<void> showSettingsDialog({
                     },
                     child: Text(l10n.signOut),
                   ),
+                  if (isDesktop) ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                        side: BorderSide(color: Theme.of(context).colorScheme.error.withValues(alpha: 0.4)),
+                      ),
+                      onPressed: () => windowManager.close(),
+                      child: const Text('Quit app'),
+                    ),
+                  ],
                 ],
               ),
               ),
@@ -178,19 +211,20 @@ Future<void> showSettingsDialog({
                       subtitleLanguage: subtitleLanguage,
                       matchDisplayRefreshRate: matchHz,
                       matchDisplayRefreshRateFullscreenOnly: matchHzFsOnly,
+                      revertRefreshRateOnExit: revertHz,
                     ),
                   );
                   final nextAppPrefs = appPrefs.copyWith(
                     language: appLanguage,
                     showFeedbackButton: showFeedbackButton,
                     startFullscreen: startFullscreen,
+                    acceptInvalidCertificates: acceptInvalidCerts,
                   );
                   await AppPrefs.save(nextAppPrefs);
                   if (context.mounted) {
                     final scope = AppUiScope.of(context);
                     scope.locale.value = nextAppPrefs.toLocale();
                     scope.showFeedbackButton.value = nextAppPrefs.showFeedbackButton;
-                    // Apply fullscreen change immediately.
                     if (!Platform.isAndroid) {
                       await windowManager.setFullScreen(startFullscreen);
                     }

@@ -650,6 +650,9 @@ final class _PlaybackPageState extends State<PlaybackPage> with WidgetsBindingOb
     _trackListenSub = null;
     _engine?.dispose();
     if (!_isAndroidTv) _reportStoppedIfNeeded();
+    if (_isWindows && (_playbackPrefs?.revertRefreshRateOnExit ?? false)) {
+      WindowsDisplayRefreshRate.restore();
+    }
     _subtitlePrefs?.dispose();
     _controlsVisible.dispose();
     _aspectMode.dispose();

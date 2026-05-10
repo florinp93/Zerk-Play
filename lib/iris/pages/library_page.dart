@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/app.dart';
 import '../../core/emby/models/emby_item.dart';
@@ -61,16 +62,37 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
   int? _selectedYear;
   _SortBy _sortBy = _SortBy.nameAz;
   PageRoute<dynamic>? _route;
+  bool _prefsLoaded = false;
 
   bool _loading = false;
   bool _hasMore = true;
   bool _loadMoreScheduled = false;
   Object? _error;
 
+  static String _sortPrefKey(LibraryType type) => 'library_sort_${type.name}';
+
   @override
   void initState() {
     super.initState();
     _controller.addListener(_onScroll);
+    _initSortPref();
+  }
+
+  Future<void> _initSortPref() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_sortPrefKey(widget.type)) ?? '';
+    final found = _SortBy.values.firstWhere((s) => s.name == raw, orElse: () => _SortBy.nameAz);
+    if (!mounted) return;
+    setState(() {
+      _sortBy = found;
+      _prefsLoaded = true;
+    });
+    _loadMore();
+  }
+
+  Future<void> _saveSortPref() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sortPrefKey(widget.type), _sortBy.name);
   }
 
   @override
@@ -82,7 +104,7 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
       _route = route;
       appRouteObserver.subscribe(this, route);
     }
-    if (_items.isEmpty && !_loading) {
+    if (_prefsLoaded && _items.isEmpty && !_loading) {
       _loadMore();
     }
   }
@@ -98,7 +120,8 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
       _loading = false;
       _hasMore = true;
       _error = null;
-      _loadMore();
+      _prefsLoaded = false;
+      _initSortPref();
     }
   }
 
@@ -424,6 +447,7 @@ final class _LibraryPageState extends State<LibraryPage> with RouteAware {
         _loading = false;
       }
     });
+    if (sortChanged) _saveSortPref();
     if (_controller.hasClients) _controller.jumpTo(0);
     if (sortChanged) {
       _loadMore();

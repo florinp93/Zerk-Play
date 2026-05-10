@@ -16,6 +16,7 @@ final class PlaybackPrefs {
     required this.volume,
     required this.matchDisplayRefreshRate,
     required this.matchDisplayRefreshRateFullscreenOnly,
+    required this.revertRefreshRateOnExit,
   });
 
   final PlaybackQualityPreference qualityPreference;
@@ -23,12 +24,9 @@ final class PlaybackPrefs {
   final SubtitlePreferenceMode subtitleMode;
   final String subtitleLanguage;
   final double volume;
-
-  /// Windows: switch primary display refresh rate to match video FPS (best-effort).
   final bool matchDisplayRefreshRate;
-
-  /// When [matchDisplayRefreshRate] is true, only apply while in fullscreen.
   final bool matchDisplayRefreshRateFullscreenOnly;
+  final bool revertRefreshRateOnExit;
 
   PlaybackPrefs copyWith({
     PlaybackQualityPreference? qualityPreference,
@@ -38,6 +36,7 @@ final class PlaybackPrefs {
     double? volume,
     bool? matchDisplayRefreshRate,
     bool? matchDisplayRefreshRateFullscreenOnly,
+    bool? revertRefreshRateOnExit,
   }) {
     return PlaybackPrefs(
       qualityPreference: qualityPreference ?? this.qualityPreference,
@@ -48,6 +47,7 @@ final class PlaybackPrefs {
       matchDisplayRefreshRate: matchDisplayRefreshRate ?? this.matchDisplayRefreshRate,
       matchDisplayRefreshRateFullscreenOnly:
           matchDisplayRefreshRateFullscreenOnly ?? this.matchDisplayRefreshRateFullscreenOnly,
+      revertRefreshRateOnExit: revertRefreshRateOnExit ?? this.revertRefreshRateOnExit,
     );
   }
 
@@ -59,6 +59,7 @@ final class PlaybackPrefs {
     volume: 70,
     matchDisplayRefreshRate: false,
     matchDisplayRefreshRateFullscreenOnly: true,
+    revertRefreshRateOnExit: false,
   );
 
   static const _kQuality = 'playback_quality';
@@ -68,6 +69,7 @@ final class PlaybackPrefs {
   static const _kVolume = 'playback_volume';
   static const _kMatchHz = 'playback_match_display_hz';
   static const _kMatchHzFsOnly = 'playback_match_display_hz_fs_only';
+  static const _kRevertHz = 'playback_revert_display_hz';
 
   static Future<PlaybackPrefs> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -80,6 +82,7 @@ final class PlaybackPrefs {
     final matchHz = prefs.getBool(_kMatchHz) ?? defaults.matchDisplayRefreshRate;
     final matchHzFs =
         prefs.getBool(_kMatchHzFsOnly) ?? defaults.matchDisplayRefreshRateFullscreenOnly;
+    final revertHz = prefs.getBool(_kRevertHz) ?? defaults.revertRefreshRateOnExit;
 
     return PlaybackPrefs(
       qualityPreference: _parseQuality(qualityRaw) ?? defaults.qualityPreference,
@@ -89,6 +92,7 @@ final class PlaybackPrefs {
       volume: volume,
       matchDisplayRefreshRate: matchHz,
       matchDisplayRefreshRateFullscreenOnly: matchHzFs,
+      revertRefreshRateOnExit: revertHz,
     );
   }
 
@@ -101,6 +105,7 @@ final class PlaybackPrefs {
     await prefs.setDouble(_kVolume, value.volume.clamp(0.0, 100.0));
     await prefs.setBool(_kMatchHz, value.matchDisplayRefreshRate);
     await prefs.setBool(_kMatchHzFsOnly, value.matchDisplayRefreshRateFullscreenOnly);
+    await prefs.setBool(_kRevertHz, value.revertRefreshRateOnExit);
   }
 
   int? maxStreamingBitrate() {

@@ -1,9 +1,12 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
+import 'package:window_manager/window_manager.dart';
 
 import '../../app/app.dart';
 import 'app_menu.dart';
@@ -20,6 +23,45 @@ final class AppShell extends StatefulWidget {
 
 final class _AppShellState extends State<AppShell> {
   bool _wasOnHome = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!kIsWeb && !Platform.isAndroid) {
+      HardwareKeyboard.instance.addHandler(_handleKeyEvent);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (!kIsWeb && !Platform.isAndroid) {
+      HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
+    }
+    super.dispose();
+  }
+
+  bool _handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (isTvPlatform) return false;
+
+    if (event.logicalKey == LogicalKeyboardKey.f11) {
+      windowManager.isFullScreen().then((isFull) => windowManager.setFullScreen(!isFull));
+      return true;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.backspace) {
+      final focusedWidget = FocusManager.instance.primaryFocus?.context?.widget;
+      if (focusedWidget is EditableText) return false;
+      final router = GoRouter.of(context);
+      if (router.canPop()) {
+        context.pop();
+        return true;
+      }
+    }
+
+    return false;
+  }
 
   @override
   void didChangeDependencies() {

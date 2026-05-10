@@ -11,22 +11,21 @@ final class AppPrefs {
     required this.showFeedbackButton,
     required this.startFullscreen,
     required this.collectionsViewMode,
+    required this.acceptInvalidCertificates,
   });
 
   final AppLanguage language;
   final bool showFeedbackButton;
-
-  /// Start the app in borderless fullscreen on desktop.
   final bool startFullscreen;
-
-  /// Collections page layout: large cards or cover-art grid.
   final CollectionsViewMode collectionsViewMode;
+  final bool acceptInvalidCertificates;
 
   static const defaults = AppPrefs(
     language: AppLanguage.system,
     showFeedbackButton: true,
     startFullscreen: false,
     collectionsViewMode: CollectionsViewMode.card,
+    acceptInvalidCertificates: false,
   );
 
   AppPrefs copyWith({
@@ -34,17 +33,20 @@ final class AppPrefs {
     bool? showFeedbackButton,
     bool? startFullscreen,
     CollectionsViewMode? collectionsViewMode,
+    bool? acceptInvalidCertificates,
   }) => AppPrefs(
         language: language ?? this.language,
         showFeedbackButton: showFeedbackButton ?? this.showFeedbackButton,
         startFullscreen: startFullscreen ?? this.startFullscreen,
         collectionsViewMode: collectionsViewMode ?? this.collectionsViewMode,
+        acceptInvalidCertificates: acceptInvalidCertificates ?? this.acceptInvalidCertificates,
       );
 
   static const _kAppLanguage = 'app_language';
   static const _kShowFeedbackButton = 'app_show_feedback_button';
   static const _kStartFullscreen = 'app_start_fullscreen';
   static const _kCollectionsView = 'app_collections_view';
+  static const _kAcceptInvalidCerts = 'app_accept_invalid_certs';
 
   static Future<AppPrefs> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -53,11 +55,13 @@ final class AppPrefs {
     final fs = prefs.getBool(_kStartFullscreen) ?? defaults.startFullscreen;
     final cvRaw = prefs.getString(_kCollectionsView) ?? '';
     final cv = cvRaw == 'grid' ? CollectionsViewMode.grid : CollectionsViewMode.card;
+    final acceptCerts = prefs.getBool(_kAcceptInvalidCerts) ?? defaults.acceptInvalidCertificates;
     return AppPrefs(
       language: _parseLanguage(raw) ?? defaults.language,
       showFeedbackButton: show,
       startFullscreen: fs,
       collectionsViewMode: cv,
+      acceptInvalidCertificates: acceptCerts,
     );
   }
 
@@ -70,6 +74,7 @@ final class AppPrefs {
       _kCollectionsView,
       value.collectionsViewMode == CollectionsViewMode.grid ? 'grid' : 'card',
     );
+    await prefs.setBool(_kAcceptInvalidCerts, value.acceptInvalidCertificates);
   }
 
   Locale? toLocale() {

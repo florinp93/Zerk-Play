@@ -271,9 +271,6 @@ final class AppUiScope extends InheritedWidget {
   }
 }
 
-/// Enables smooth scrolling across all device kinds (mouse, trackpad, touch).
-/// On desktop this makes mouse-drag scroll work and uses physics that feel
-/// natural on high-refresh-rate displays.
 final class _SmoothScrollBehavior extends MaterialScrollBehavior {
   @override
   Set<PointerDeviceKind> get dragDevices => {
@@ -285,5 +282,5 @@ final class _SmoothScrollBehavior extends MaterialScrollBehavior {
 
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) =>
-      const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+      const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
 }

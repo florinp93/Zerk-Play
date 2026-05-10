@@ -308,7 +308,7 @@ final class _HomePageState extends State<HomePage> with RouteAware {
               slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 12),
+                    padding: const EdgeInsets.only(top: 16),
                     child: loading
                         ? const _HeroCarouselSkeleton()
                         : _HeroCarousel(
